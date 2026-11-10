@@ -6495,6 +6495,36 @@ acfs_run_verified_upstream_script_as_target_with_env() {
     return "$run_status"
 }
 
+# mac-flywheel local fix (never proposed upstream). UBS's piped main/install.sh
+# resolves releases/latest (v5.5.26), whose runner predates the
+# UBS_RELEASE_GENERATIONS protocol that installer now requires, so it always
+# exits 1 ("Target runner does not support verified cache publication";
+# Dicklesworthstone/ultimate_bug_scanner#202). Run the installer from a source
+# checkout pinned to an exact commit instead: that is the installer's supported
+# "current source checkout" path, and it installs the checkout's own runner.
+# Drop this and restore the verified call once UBS publishes a
+# generation-capable release.
+ACFS_UBS_SOURCE_REPO="https://github.com/tkfor21/ultimate_bug_scanner.git"
+ACFS_UBS_SOURCE_SHA="76d857de41b4da314b0be2f4022e0f5878710513"
+
+acfs_install_ubs_from_pinned_checkout() {
+    # shellcheck disable=SC2016  # expanded by the target user's bash
+    run_as_target_runner bash -c '
+        set -euo pipefail
+        repo="$1"; sha="$2"; shift 2
+        src="$(mktemp -d)"
+        trap '\''rm -rf -- "$src"'\'' EXIT
+        git -C "$src" init -q
+        git -C "$src" fetch -q --depth 1 "$repo" "$sha"
+        git -C "$src" checkout -q --detach FETCH_HEAD
+        if [[ "$(git -C "$src" rev-parse HEAD)" != "$sha" ]]; then
+            echo "UBS checkout is not the pinned commit $sha" >&2
+            exit 1
+        fi
+        bash "$src/install.sh" "$@" </dev/null
+    ' acfs-ubs "$ACFS_UBS_SOURCE_REPO" "$ACFS_UBS_SOURCE_SHA" "$@"
+}
+
 acfs_run_verified_upstream_script_as_target() {
     if [[ $# -lt 2 ]]; then
         log_error "acfs_run_verified_upstream_script_as_target requires a tool and runner"
@@ -10846,7 +10876,7 @@ UNIT_EOF
         log_detail "Installing Ultimate Bug Scanner"
         # --skip-hooks as in the manifest entry: ACFS wires agent hooks itself,
         # so the UBS installer must not edit ~/.claude/settings.json (#400).
-        acfs_try_module_step "stack.ultimate_bug_scanner" "Installing UBS" acfs_run_verified_upstream_script_as_target "ubs" "bash" --easy-mode --skip-hooks || acfs_optional_module_install_failed "ubs" "UBS"
+        acfs_try_module_step "stack.ultimate_bug_scanner" "Installing UBS" acfs_install_ubs_from_pinned_checkout --easy-mode --skip-hooks || acfs_optional_module_install_failed "ubs" "UBS"
     fi
 
     # Beads Rust
