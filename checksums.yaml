@@ -16,7 +16,7 @@ installers:
 
   atuin:
     url: "https://github.com/atuinsh/atuin/releases/latest/download/atuin-installer.sh"
-    sha256: "4e32fb752978e433fe512bffc83b2d1d1257b72c968180e1c305f4ae5a064c67"
+    sha256: "a30cdd4af613f352f7e533f8a5416b25978d788664f6bb63ad224d4f2fd66b63"
 
   br:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh"
@@ -116,7 +116,7 @@ installers:
 
   ohmyzsh:
     url: "https://install.ohmyz.sh/"
-    sha256: "5574b96e94dbcb769f0d1592fa83aeb6ca2caf41c6ae5d76fcc7f04c524b4f55"
+    sha256: "3f9f1b6269deddc51cdcab2a689f54821e6e62c24401f970de4bfafad328b2ef"
 
   omp:
     url: "https://omp.sh/install.sh"
