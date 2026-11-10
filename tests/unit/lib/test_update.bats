@@ -17188,13 +17188,31 @@ _run_drift_report() {
     # $CLAUDE_PROJECT_DIR-relative paths every night. ACFS owns agent hooks.
     local update="$PROJECT_ROOT/scripts/lib/update.sh"
 
-    run grep -F 'run_cmd "Ultimate Bug Scanner" update_run_verified_installer ubs --easy-mode --skip-hooks' "$update"
+    # mac-flywheel: UBS installs from a pinned source checkout (#202 upstream).
+    run grep -F 'run_cmd "Ultimate Bug Scanner" update_install_ubs_from_pinned_checkout --easy-mode --skip-hooks' "$update"
     assert_success
 
-    run grep -F 'update_run_verified_installer ubs --easy-mode"' "$update"
+    run grep -E 'Ultimate Bug Scanner.*--easy-mode"?[[:space:]]*$' "$update"
     assert_failure
-    run grep -E 'update_run_verified_installer ubs --easy-mode[[:space:]]*$' "$update"
-    assert_failure
+}
+
+@test "mac-flywheel: update and install pin the same UBS source checkout" {
+    # The update path cannot source install.sh, so the pin is duplicated; drift
+    # would install one UBS at setup and another on the nightly.
+    local update="$PROJECT_ROOT/scripts/lib/update.sh"
+    local install="$PROJECT_ROOT/install.sh"
+    local key
+    for key in ACFS_UBS_SOURCE_REPO ACFS_UBS_SOURCE_SHA; do
+        local in_update in_install
+        in_update="$(grep -E "^${key}=" "$update")"
+        in_install="$(grep -E "^${key}=" "$install")"
+        [[ -n "$in_update" ]]
+        [[ "$in_update" == "$in_install" ]]
+    done
+    run grep -E '^ACFS_UBS_SOURCE_SHA="[0-9a-f]{40}"$' "$update"
+    assert_success
+    run grep -F 'acfs_install_ubs_from_pinned_checkout --easy-mode --skip-hooks' "$install"
+    assert_success
 }
 
 @test "acfs origin check: insteadOf-injected credentials are accepted but never logged" {

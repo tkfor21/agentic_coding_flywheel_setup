@@ -6503,7 +6503,9 @@ acfs_run_verified_upstream_script_as_target_with_env() {
 # checkout pinned to an exact commit instead: that is the installer's supported
 # "current source checkout" path, and it installs the checkout's own runner.
 # Drop this and restore the verified call once UBS publishes a
-# generation-capable release.
+# generation-capable release. The `acfs update` twin is
+# update_install_ubs_from_pinned_checkout in scripts/lib/update.sh; keep the
+# two pins equal.
 ACFS_UBS_SOURCE_REPO="https://github.com/tkfor21/ultimate_bug_scanner.git"
 ACFS_UBS_SOURCE_SHA="76d857de41b4da314b0be2f4022e0f5878710513"
 

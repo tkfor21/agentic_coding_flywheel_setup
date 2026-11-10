@@ -6273,6 +6273,36 @@ update_run_verified_installer() {
     update_run_verified_installer_with_env "$tool" "" "$@"
 }
 
+# mac-flywheel local fix (never proposed upstream), the update-path twin of
+# acfs_install_ubs_from_pinned_checkout in install.sh. Keep the two pins equal.
+# UBS's piped main/install.sh resolves releases/latest (v5.5.26), whose runner
+# predates the UBS_RELEASE_GENERATIONS protocol that installer now requires, so
+# it always exits 1 (Dicklesworthstone/ultimate_bug_scanner#202). Run the
+# installer from a source checkout pinned to an exact commit instead. Drop this
+# and restore update_run_verified_installer ubs once UBS publishes a
+# generation-capable release.
+ACFS_UBS_SOURCE_REPO="https://github.com/tkfor21/ultimate_bug_scanner.git"
+ACFS_UBS_SOURCE_SHA="76d857de41b4da314b0be2f4022e0f5878710513"
+
+# shellcheck disable=SC2317,SC2329  # invoked indirectly via run_cmd()
+update_install_ubs_from_pinned_checkout() {
+    # shellcheck disable=SC2016  # expanded by the target user's bash
+    update_run_in_target_context "" bash -c '
+        set -euo pipefail
+        repo="$1"; sha="$2"; shift 2
+        src="$(mktemp -d)"
+        trap '\''rm -rf -- "$src"'\'' EXIT
+        git -C "$src" init -q
+        git -C "$src" fetch -q --depth 1 "$repo" "$sha"
+        git -C "$src" checkout -q --detach FETCH_HEAD
+        if [[ "$(git -C "$src" rev-parse HEAD)" != "$sha" ]]; then
+            echo "UBS checkout is not the pinned commit $sha" >&2
+            exit 1
+        fi
+        bash "$src/install.sh" "$@" </dev/null
+    ' acfs-ubs "$ACFS_UBS_SOURCE_REPO" "$ACFS_UBS_SOURCE_SHA" "$@" </dev/null
+}
+
 update_prepare_target_installer_tmpdir() {
     local tool="${1:-}"
     local target_user=""
@@ -9402,7 +9432,7 @@ update_stack() {
     # $CLAUDE_PROJECT_DIR-relative hook paths into the user-level
     # ~/.claude/settings.json every night (#400). ACFS wires agent hooks (DCG)
     # itself; per-project UBS hooks are a choice made inside a repo.
-    run_cmd "Ultimate Bug Scanner" update_run_verified_installer ubs --easy-mode --skip-hooks
+    run_cmd "Ultimate Bug Scanner" update_install_ubs_from_pinned_checkout --easy-mode --skip-hooks
 
     # Beads Viewer - always install/update
     run_cmd "Beads Viewer" update_run_verified_installer bv
