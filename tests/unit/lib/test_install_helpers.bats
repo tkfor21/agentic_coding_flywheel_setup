@@ -491,6 +491,59 @@ EOF
     assert_success
 }
 
+_mf_fake_ubs_origin() {
+    # A local stand-in for the UBS fork: one commit whose install.sh reports its
+    # arguments and whether stdin is closed, as the real installer is run.
+    local origin="$1"
+    git init -q "$origin"
+    cat > "$origin/install.sh" <<'EOF'
+#!/usr/bin/env bash
+if read -r -t 1 _line; then stdin=open; else stdin=closed; fi
+printf 'fake-ubs-installer args=%s stdin=%s\n' "$*" "$stdin"
+EOF
+    git -C "$origin" add install.sh
+    git -C "$origin" -c user.name=t -c user.email=t@example.invalid commit -q -m fake
+    git -C "$origin" rev-parse HEAD
+}
+
+_mf_load_ubs_checkout_function() {
+    eval "$(sed -n '/^acfs_install_ubs_from_pinned_checkout() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    declare -F acfs_install_ubs_from_pinned_checkout >/dev/null \
+        || fail "acfs_install_ubs_from_pinned_checkout not found in install.sh"
+}
+
+@test "mac-flywheel: UBS pinned-checkout install passes the clean target runner" {
+    local current_user
+    current_user="$(command id -un)"
+    export TARGET_USER="$current_user"
+    export TARGET_HOME="$(_acfs_resolve_target_home "$current_user")"
+    _mf_load_ubs_checkout_function
+
+    ACFS_UBS_SOURCE_REPO="$BATS_TEST_TMPDIR/ubs-origin"
+    ACFS_UBS_SOURCE_SHA="$(_mf_fake_ubs_origin "$ACFS_UBS_SOURCE_REPO")"
+
+    run acfs_install_ubs_from_pinned_checkout --easy-mode --skip-hooks
+    assert_success
+    assert_output --partial "fake-ubs-installer args=--easy-mode --skip-hooks stdin=closed"
+    refute_output --partial "Clean target runner"
+}
+
+@test "mac-flywheel: UBS pinned-checkout install refuses a commit that is not the pin" {
+    local current_user
+    current_user="$(command id -un)"
+    export TARGET_USER="$current_user"
+    export TARGET_HOME="$(_acfs_resolve_target_home "$current_user")"
+    _mf_load_ubs_checkout_function
+
+    ACFS_UBS_SOURCE_REPO="$BATS_TEST_TMPDIR/ubs-origin"
+    _mf_fake_ubs_origin "$ACFS_UBS_SOURCE_REPO" >/dev/null
+    ACFS_UBS_SOURCE_SHA="0123456789abcdef0123456789abcdef01234567"
+
+    run acfs_install_ubs_from_pinned_checkout --easy-mode --skip-hooks
+    assert_failure
+    refute_output --partial "fake-ubs-installer"
+}
+
 @test "run_as_target_runner preserves verified runner failure status" {
     local current_user
     local current_home

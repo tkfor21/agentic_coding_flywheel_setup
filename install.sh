@@ -6510,21 +6510,26 @@ ACFS_UBS_SOURCE_REPO="https://github.com/tkfor21/ultimate_bug_scanner.git"
 ACFS_UBS_SOURCE_SHA="76d857de41b4da314b0be2f4022e0f5878710513"
 
 acfs_install_ubs_from_pinned_checkout() {
+    # The clean target runner only accepts `bash -s -- args` with the script on
+    # stdin (or an absolute script file), so the checkout steps go in on stdin.
+    # Nothing in them reads stdin, and the UBS installer gets /dev/null.
     # shellcheck disable=SC2016  # expanded by the target user's bash
-    run_as_target_runner bash -c '
+    local checkout_script='
         set -euo pipefail
         repo="$1"; sha="$2"; shift 2
         src="$(mktemp -d)"
         trap '\''rm -rf -- "$src"'\'' EXIT
         git -C "$src" init -q
-        git -C "$src" fetch -q --depth 1 "$repo" "$sha"
+        git -C "$src" fetch -q --depth 1 "$repo" "$sha" </dev/null
         git -C "$src" checkout -q --detach FETCH_HEAD
         if [[ "$(git -C "$src" rev-parse HEAD)" != "$sha" ]]; then
             echo "UBS checkout is not the pinned commit $sha" >&2
             exit 1
         fi
         bash "$src/install.sh" "$@" </dev/null
-    ' acfs-ubs "$ACFS_UBS_SOURCE_REPO" "$ACFS_UBS_SOURCE_SHA" "$@"
+    '
+    printf '%s\n' "$checkout_script" \
+        | run_as_target_runner bash -s -- "$ACFS_UBS_SOURCE_REPO" "$ACFS_UBS_SOURCE_SHA" "$@"
 }
 
 acfs_run_verified_upstream_script_as_target() {
