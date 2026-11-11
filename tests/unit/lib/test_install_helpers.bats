@@ -45,6 +45,12 @@ use_spy_sudo() {
 
         [[ -n "$name" ]] || return 1
 
+        # mac-flywheel local fix (fork issue #1): as root, run_as_target
+        # prefers runuser over sudo, which would bypass this spy and look up
+        # the test's fixture users in the real NSS. Without runuser, root also
+        # goes through the spy. Non-root runs never reach runuser here.
+        [[ "$name" != "runuser" ]] || return 1
+
         if [[ "$name" == "sudo" && -n "${ACFS_TEST_SUDO_BIN:-}" && -x "$ACFS_TEST_SUDO_BIN" ]]; then
             printf '%s\n' "$ACFS_TEST_SUDO_BIN"
             return 0
@@ -195,6 +201,14 @@ EOF
     chmod +x "$HOME/.cargo/bin/acfs-home-path-tool"
 
     run run_as_current_shell "acfs-home-path-tool"
+    # mac-flywheel local fix (fork issue #1): a root shell deliberately gets
+    # the privileged, system-only PATH (_run_shell_with_strict_mode), so a
+    # HOME tool must NOT resolve there. Assert each identity's contract.
+    if [[ "$EUID" -eq 0 ]]; then
+        assert_failure 127
+        refute_output --partial "home-path-ok"
+        return 0
+    fi
     assert_success
     assert_output "home-path-ok"
 }
@@ -744,9 +758,20 @@ _mf_load_ubs_checkout_function() {
     assert_output ""
 }
 
+# mac-flywheel local fix (fork issue #1): the current-user HOME fallback is
+# only reachable for a non-root user (root resolves to /root before it), so
+# these tests pin a non-root current user instead of inheriting the runner's.
+use_fixture_current_user() {
+    ACFS_FIXTURE_CURRENT_USER="acfsfixtureuser"
+    _acfs_resolve_current_user() {
+        printf '%s\n' "$ACFS_FIXTURE_CURRENT_USER"
+    }
+}
+
 @test "_acfs_resolve_target_home: ignores slash passwd homes and falls back to current HOME" {
     local current_user
-    current_user="$(command id -un 2>/dev/null || command whoami 2>/dev/null)"
+    use_fixture_current_user
+    current_user="$ACFS_FIXTURE_CURRENT_USER"
     export HOME="$BATS_TEST_TMPDIR/current-home"
     mkdir -p "$HOME"
 
@@ -768,7 +793,8 @@ _mf_load_ubs_checkout_function() {
     local current_home
     local target_home
 
-    current_user="$(command id -un 2>/dev/null || command whoami 2>/dev/null)"
+    use_fixture_current_user
+    current_user="$ACFS_FIXTURE_CURRENT_USER"
     current_home="$(create_temp_dir)"
     target_home="$(create_temp_dir)"
     export HOME="$current_home"
@@ -788,7 +814,8 @@ _mf_load_ubs_checkout_function() {
 
 @test "_acfs_resolve_target_home: rejects slash HOME for current user when passwd resolution is unavailable" {
     local current_user
-    current_user="$(command id -un 2>/dev/null || command whoami 2>/dev/null)"
+    use_fixture_current_user
+    current_user="$ACFS_FIXTURE_CURRENT_USER"
     export HOME="/"
 
     _acfs_getent_passwd_entry() {
