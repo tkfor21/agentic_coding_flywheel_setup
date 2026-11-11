@@ -1109,11 +1109,26 @@ _mf_load_ubs_checkout_function() {
 # Use the real timeout and strict-shell runners. The fixture scales only the
 # declared 120-second production allowance to keep a regression test short;
 # its TERM-resistant child still exercises timeout's real kill escalation.
+# mac-flywheel local fix (Dicklesworthstone/agentic_coding_flywheel_setup#507):
+# a non-root caller reaches the root verification context through
+# `sudo -n env <allow-list>`, which drops ACFS_VERIFY_FIXTURE_ROOT, so scripts
+# that run there must carry the fixture path themselves. Writes stdin to $1
+# with ACFS_VERIFY_FIXTURE_ROOT assigned right after the shebang line.
+_write_verification_fixture_script() {
+    local path="$1" shebang=""
+    IFS= read -r shebang
+    {
+        printf '%s\n' "$shebang"
+        printf 'ACFS_VERIFY_FIXTURE_ROOT=%q\n' "$ACFS_VERIFY_FIXTURE_ROOT"
+        cat
+    } > "$path"
+}
+
 setup_verification_deadline_fixture() {
     export ACFS_VERIFY_FIXTURE_ROOT="$BATS_TEST_TMPDIR/verification"
     export ACFS_VERIFY_FIXTURE_SOURCE="$PROJECT_ROOT"
     mkdir -p "$ACFS_VERIFY_FIXTURE_ROOT"
-    cat > "$ACFS_VERIFY_FIXTURE_ROOT/timeout" <<'EOF'
+    _write_verification_fixture_script "$ACFS_VERIFY_FIXTURE_ROOT/timeout" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$1 $2" >> "$ACFS_VERIFY_FIXTURE_ROOT/timeouts"
@@ -1124,7 +1139,7 @@ duration=0.3s
 [[ "${ACFS_VERIFY_FIXTURE_INTERRUPT:-false}" != true ]] || duration=7s
 exec /usr/bin/timeout --kill-after=0.3s "$duration" "$@"
 EOF
-    cat > "$ACFS_VERIFY_FIXTURE_ROOT/hanging-tool" <<'EOF'
+    _write_verification_fixture_script "$ACFS_VERIFY_FIXTURE_ROOT/hanging-tool" <<'EOF'
 #!/usr/bin/env bash
 trap '' TERM
 while read -r key value; do
@@ -1289,10 +1304,13 @@ assert_verification_fixture_stopped() {
 
 @test "acfs_module_is_installed: bounds hanging presence checks in every execution context" {
     setup_verification_deadline_fixture
-    local context
+    local context check
+    # Absolute and pre-quoted: the root context's shell has no
+    # ACFS_VERIFY_FIXTURE_ROOT when the suite runs as a normal user (#507).
+    printf -v check 'exec %q' "$ACFS_VERIFY_FIXTURE_ROOT/hanging-tool"
     for context in current root target_user; do
         run /usr/bin/timeout --kill-after=0.2s 8s "$ACFS_VERIFY_FIXTURE_ROOT/runner" present \
-            'exec "$ACFS_VERIFY_FIXTURE_ROOT/hanging-tool"' "$context"
+            "$check" "$context"
         assert_equal "$status" 137
         assert_output --partial 'returned:137'
         assert_verification_fixture_stopped
