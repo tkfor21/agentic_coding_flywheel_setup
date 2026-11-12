@@ -312,18 +312,27 @@ export function validateVerifiedInstallerRunner(manifest: Manifest): ValidationE
 // URL may be a frozen form of the manifest URL instead of the URL itself:
 //   - the same GitHub raw repo and path at a 40-hex commit, instead of a branch (`main` or `refs/heads/main`);
 //   - the same GitHub repo and asset at a release tag, instead of releases/latest;
-//   - a vendored copy of this tool, vendor/installers/<tool>.sh at a 40-hex commit.
+//   - a vendored copy of this tool, vendor/installers/<tool>.sh at a 40-hex commit of this fork only.
 const RAW_GITHUB_URL = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(?:refs\/heads\/)?([^/]+)\/(.+)$/;
 const RELEASE_LATEST_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/latest\/download\/([^/]+)$/;
 const RELEASE_TAG_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/download\/([^/]+)\/([^/]+)$/;
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
+// Vendored copies are accepted only from this fork, where they are reviewed before being committed.
+const VENDOR_OWNER = "tkfor21";
+const VENDOR_REPO = "agentic_coding_flywheel_setup";
 
 export function isFrozenInstallerUrl(manifestUrl: string, checksumsUrl: string, tool: string): boolean {
   if (manifestUrl === checksumsUrl) return true;
 
   const frozenRaw = RAW_GITHUB_URL.exec(checksumsUrl);
   if (frozenRaw && COMMIT_SHA.test(frozenRaw[3] ?? "")) {
-    if (frozenRaw[4] === `vendor/installers/${tool}.sh`) return true;
+    if (
+      frozenRaw[1] === VENDOR_OWNER &&
+      frozenRaw[2] === VENDOR_REPO &&
+      frozenRaw[4] === `vendor/installers/${tool}.sh`
+    ) {
+      return true;
+    }
     const source = RAW_GITHUB_URL.exec(manifestUrl);
     if (
       source &&

@@ -823,6 +823,19 @@ modules:
           "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/main/vendor/installers/rch.sh",
         ),
       ).toEqual(mismatch);
+      // a vendored copy outside this fork (another owner, or another repo of the same owner)
+      expect(
+        errorsFor(
+          "https://example.com/install.sh",
+          `https://raw.githubusercontent.com/evil/agentic_coding_flywheel_setup/${commit}/vendor/installers/rch.sh`,
+        ),
+      ).toEqual(mismatch);
+      expect(
+        errorsFor(
+          "https://example.com/install.sh",
+          `https://raw.githubusercontent.com/tkfor21/other-repo/${commit}/vendor/installers/rch.sh`,
+        ),
+      ).toEqual(mismatch);
     });
   });
 
