@@ -307,6 +307,43 @@ export function validateVerifiedInstallerRunner(manifest: Manifest): ValidationE
   return errors;
 }
 
+// mac-flywheel local fix (never proposed upstream). checksums.yaml freezes every installer to immutable bytes
+// (scripts/mac-flywheel/freeze-installers.sh; Joel's rule of 2026-11-01: hold what is true at refresh time), so its
+// URL may be a frozen form of the manifest URL instead of the URL itself:
+//   - the same GitHub raw repo and path at a 40-hex commit, instead of a branch (`main` or `refs/heads/main`);
+//   - the same GitHub repo and asset at a release tag, instead of releases/latest;
+//   - a vendored copy of this tool, vendor/installers/<tool>.sh at a 40-hex commit.
+const RAW_GITHUB_URL = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(?:refs\/heads\/)?([^/]+)\/(.+)$/;
+const RELEASE_LATEST_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/latest\/download\/([^/]+)$/;
+const RELEASE_TAG_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/download\/([^/]+)\/([^/]+)$/;
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+
+export function isFrozenInstallerUrl(manifestUrl: string, checksumsUrl: string, tool: string): boolean {
+  if (manifestUrl === checksumsUrl) return true;
+
+  const frozenRaw = RAW_GITHUB_URL.exec(checksumsUrl);
+  if (frozenRaw && COMMIT_SHA.test(frozenRaw[3] ?? "")) {
+    if (frozenRaw[4] === `vendor/installers/${tool}.sh`) return true;
+    const source = RAW_GITHUB_URL.exec(manifestUrl);
+    if (
+      source &&
+      source[1] === frozenRaw[1] &&
+      source[2] === frozenRaw[2] &&
+      source[4] === frozenRaw[4] &&
+      !COMMIT_SHA.test(source[3] ?? "")
+    ) {
+      return true;
+    }
+  }
+
+  const latest = RELEASE_LATEST_URL.exec(manifestUrl);
+  const tagged = RELEASE_TAG_URL.exec(checksumsUrl);
+  if (latest && tagged) {
+    return latest[1] === tagged[1] && latest[2] === tagged[2] && latest[3] === tagged[4] && tagged[3] !== "latest";
+  }
+  return false;
+}
+
 /**
  * Validates that every verified installer has checksums.yaml coverage and, when
  * the manifest declares an explicit installer URL, that it matches checksums.yaml.
@@ -354,7 +391,7 @@ export function validateVerifiedInstallerChecksums(
       continue;
     }
 
-    if (verifiedInstaller.url && verifiedInstaller.url !== entry.url) {
+    if (verifiedInstaller.url && !isFrozenInstallerUrl(verifiedInstaller.url, entry.url, tool)) {
       errors.push({
         code: "VERIFIED_INSTALLER_URL_MISMATCH",
         message: `Module "${module.id}" declares verified_installer.url "${verifiedInstaller.url}" but checksums.yaml uses "${entry.url}"`,
