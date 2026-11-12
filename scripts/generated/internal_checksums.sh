@@ -10,14 +10,14 @@
 ACFS_INTERNAL_CHECKSUMS_SCHEMA=1
 
 declare -gA ACFS_INTERNAL_CHECKSUMS=(
-  [install.sh]="706b24fb72282f1a5cfae439b6a6c3965ddec8f72a38c970310595c42570842d"
+  [install.sh]="d0ba7071f6773b9c7700a35f1c0cc4025fa0d4b4eccc3c6af78ec285bf8cc44b"
   [checksums.yaml]="0a2193fd178cce98cc080975b3a77c6eb0bc32bb8fb062a6d762af6b46ae6761"
   [scripts/preflight.sh]="76e6768d16238317e67f7c0ba38abf5e7440b9d4f76bfd28b5c07b7f007d247e"
   [scripts/lib/security.sh]="808f9123087b2449b2376198cd05338b5ebf168be673bf05e09a0c772b7a546e"
   [scripts/lib/holds.sh]="8f303cd51b5bfd75059ab1d01448e1c01bd31d3005dd6bb4352fc96dc3c29377"
   [scripts/lib/github_api.sh]="28e27710463a4c2183803aa2a3504763ad555a898ebca4691414c18fc3fe6ce3"
   [scripts/lib/contract.sh]="22c148f44ddbaccd559196196ef903f26f65fc77e3b1b6b4efc62b77d3b97aa3"
-  [scripts/lib/update.sh]="75c8cb90269add72c1f79cf2dfb49dbff598d8babbd4d6469467369be96a3eed"
+  [scripts/lib/update.sh]="6ce5597ec6e2f281af8b760f99b6dd7703d1f613ddc17eb453d73a42274983e4"
   [scripts/lib/doctor.sh]="b255b014a69b01e6e85ff17eb490fd97068ac22dcbfe843ede19ee0f938d499b"
   [scripts/lib/acfs-services.sh]="eb5017eb31ac6df398b0fdc312cfd613e5c84cbd5c2f6925ea79de152f364120"
   [scripts/lib/doctor_fix.sh]="f0abbaa397e18e1c57ead2d890746a75c30eaba7ccf612d34c075bf01248a3c4"
@@ -29,7 +29,7 @@ declare -gA ACFS_INTERNAL_CHECKSUMS=(
   [scripts/lib/autofix_version_managers.sh]="e235b7bfb95115f00bf7a4e3398be504c576d1fbe97a64c64a988294d62d621e"
   [scripts/lib/ubuntu_upgrade.sh]="cf763f760654fae173dbf4af7a2c93f8533270a41fad079b35226e58af4389cd"
   [scripts/lib/upgrade_resume.sh]="539e556a3ef2f9e369ff068c33c2ace06bc3aa82f16af74f72335df3541c739c"
-  [scripts/lib/install_helpers.sh]="eaa6b5189eef0374489031e5005f76152a5133fb3df93163b91e73674a98b7b7"
+  [scripts/lib/install_helpers.sh]="4b3088b5492b69df245c94b91149742526083800fbbac0dea80fc42bee3981bb"
   [scripts/lib/logging.sh]="890d8e6e44332bede591e462b277a903ae8d8679adebd8cc4fc76face078f6be"
   [scripts/lib/output.sh]="95c83ae9c67fbd9364f1d69a6430ca8df7ebd1bd2cfa0fe9339afdead74e96eb"
   [scripts/lib/gum_ui.sh]="1616f7f6fdd730802da196a661a2e5f576e480e4e96d745ce12ea5b64f9559b5"

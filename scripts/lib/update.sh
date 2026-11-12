@@ -9437,8 +9437,10 @@ update_stack() {
     # Beads Viewer - always install/update
     run_cmd "Beads Viewer" update_run_verified_installer bv
 
-    # Beads Rust (br) - local issue tracker CLI - always install/update
-    run_cmd "Beads Rust" update_run_verified_installer br
+    # Beads Rust (br) - local issue tracker CLI - always install/update.
+    # mac-flywheel local fix: BR_INSTALLER_SELF_REEXEC=1 stops br's installer from exec'ing main's install.sh
+    # in place of the verified, frozen bytes.
+    run_cmd "Beads Rust" update_run_verified_installer_with_env br "BR_INSTALLER_SELF_REEXEC=1"
 
     # CASS - always install/update. Its upstream installer uses a lock inside
     # TMPDIR; give it an ACFS-owned target-user temp root so stale shared

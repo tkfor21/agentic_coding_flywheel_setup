@@ -476,6 +476,52 @@ EOF
     [[ ! -e "$startup_marker" ]] || fail "BASH_ENV executed before the verified installer"
 }
 
+# mac-flywheel local fix: run from stdin (as ACFS runs every verified installer), br's installer downloads
+# install.sh from main and execs it, replacing the verified, frozen bytes (br.sh:62-92). Its own opt-out,
+# BR_INSTALLER_SELF_REEXEC=1, keeps the verified script running.
+@test "mac-flywheel: the clean runner allows exactly BR_INSTALLER_SELF_REEXEC=1 (both allow-list copies)" {
+    local home="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$home"
+    # install_helpers.sh copy (sourced by setup)
+    _acfs_clean_runner_env_allowed "$home" "BR_INSTALLER_SELF_REEXEC=1" || fail "install_helpers.sh refuses the br opt-out"
+    # install.sh copy
+    (
+        eval "$(sed -n '/^_acfs_clean_runner_env_allowed() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+        _acfs_clean_runner_env_allowed "$home" "BR_INSTALLER_SELF_REEXEC=1"
+    ) || fail "install.sh refuses the br opt-out"
+    local bad
+    for bad in "BR_INSTALLER_SELF_REEXEC=0" "BR_INSTALLER_SELF_REEXEC=" "BR_INSTALLER_URL=https://example.invalid/i.sh" \
+        "BR_INSTALLER_BRANCH=main"; do
+        ! _acfs_clean_runner_env_allowed "$home" "$bad" || fail "install_helpers.sh allows $bad"
+        ! (
+            eval "$(sed -n '/^_acfs_clean_runner_env_allowed() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+            _acfs_clean_runner_env_allowed "$home" "$bad"
+        ) || fail "install.sh allows $bad"
+    done
+}
+
+@test "mac-flywheel: BR_INSTALLER_SELF_REEXEC=1 reaches the installer through the clean runner" {
+    local current_user verified_script="$BATS_TEST_TMPDIR/verified-installer.sh"
+    current_user="$(command id -un)"
+    export TARGET_USER="$current_user"
+    export TARGET_HOME="$(_acfs_resolve_target_home "$current_user")"
+    printf 'printf "reexec=%%s\\n" "${BR_INSTALLER_SELF_REEXEC:-missing}"\n' > "$verified_script"
+    run run_as_target_runner env BR_INSTALLER_SELF_REEXEC=1 bash "$verified_script"
+    assert_success
+    assert_output --partial "reexec=1"
+}
+
+@test "mac-flywheel: install and update run br with its self re-exec disabled" {
+    run grep -F 'acfs_run_verified_upstream_script_as_target_with_env "br" "bash" "BR_INSTALLER_SELF_REEXEC=1"' "$PROJECT_ROOT/install.sh"
+    assert_success
+    run grep -E 'acfs_run_verified_upstream_script_as_target "br" ' "$PROJECT_ROOT/install.sh"
+    assert_failure
+    run grep -F 'update_run_verified_installer_with_env br "BR_INSTALLER_SELF_REEXEC=1"' "$PROJECT_ROOT/scripts/lib/update.sh"
+    assert_success
+    run grep -E 'update_run_verified_installer br$' "$PROJECT_ROOT/scripts/lib/update.sh"
+    assert_failure
+}
+
 @test "run_as_target_runner strips loader controls before its first external command" {
     local helpers="$PROJECT_ROOT/scripts/lib/install_helpers.sh"
 

@@ -989,8 +989,9 @@ _acfs_clean_runner_env_allowed() {
     local leaf=""
     local component=""
 
+        # BR_INSTALLER_SELF_REEXEC=1: mac-flywheel local fix (br.sh would otherwise exec main's install.sh).
         case "$assignment" in
-            ATUIN_NO_MODIFY_PATH=1|AM_INSTALL_SKIP_MCP_SETUP=1|AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1|RU_NON_INTERACTIVE=1)
+            ATUIN_NO_MODIFY_PATH=1|AM_INSTALL_SKIP_MCP_SETUP=1|AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1|RU_NON_INTERACTIVE=1|BR_INSTALLER_SELF_REEXEC=1)
                 return 0
                 ;;
             "GROK_BIN_DIR=$user_home/.local/bin")

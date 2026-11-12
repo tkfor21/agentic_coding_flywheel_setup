@@ -15599,10 +15599,11 @@ EOF
     local br_line
     local bv_line
 
-    run grep -F 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash"' "$PROJECT_ROOT/install.sh"
+    # mac-flywheel: br runs through the _with_env form (BR_INSTALLER_SELF_REEXEC=1).
+    run grep -F 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target_with_env "br" "bash"' "$PROJECT_ROOT/install.sh"
     assert_success
 
-    br_line="$(grep -n 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
+    br_line="$(grep -n 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target_with_env "br" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
     bv_line="$(grep -n 'Installing Beads Viewer" acfs_run_verified_upstream_script_as_target "bv" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
 
     [[ -n "$br_line" ]]
