@@ -479,29 +479,85 @@ EOF
 # mac-flywheel local fix: run from stdin (as ACFS runs every verified installer), br's installer downloads
 # install.sh from main and execs it, replacing the verified, frozen bytes (br.sh:62-92). Its own opt-out,
 # BR_INSTALLER_SELF_REEXEC=1, keeps the verified script running.
-@test "mac-flywheel: the clean runner allows exactly BR_INSTALLER_SELF_REEXEC=1 (both allow-list copies)" {
-    local home="$BATS_TEST_TMPDIR/home"
+# mac-flywheel local: per-installer environment pins live in one table, security.sh ACFS_INSTALLER_PIN_ENV,
+# which both install.sh and `acfs update` load before running any installer.
+@test "mac-flywheel: the installer pin table is well-formed" {
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "$(declare -p ACFS_INSTALLER_PIN_ENV 2>/dev/null)" == "declare -A"* ]] || fail "ACFS_INSTALLER_PIN_ENV is not an associative array"
+    local tool line names
+    for tool in "${!ACFS_INSTALLER_PIN_ENV[@]}"; do
+        names=":"
+        while IFS= read -r line; do
+            [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=[^[:space:]]+$ ]] || fail "$tool: malformed pin '$line'"
+            [[ "$names" != *":${BASH_REMATCH[1]}:"* ]] || fail "$tool: ${BASH_REMATCH[1]} pinned twice"
+            names+="${BASH_REMATCH[1]}:"
+        done <<< "${ACFS_INSTALLER_PIN_ENV[$tool]}"
+    done
+    [[ "$(acfs_installer_pin_env br)" == "BR_INSTALLER_SELF_REEXEC=1" ]] || fail "br pin missing"
+    [[ "$(acfs_installer_pin_env ru)" == "RU_INSTALLER_NO_SELF_REFRESH=1" ]] || fail "ru pin missing"
+    [[ -z "$(acfs_installer_pin_env no_such_tool)" ]] || fail "an unknown tool has pins"
+}
+
+@test "mac-flywheel: the clean runner allows exactly the pinned assignments (both allow-list copies)" {
+    local home="$BATS_TEST_TMPDIR/home" good bad
     mkdir -p "$home"
-    # install_helpers.sh copy (sourced by setup)
-    _acfs_clean_runner_env_allowed "$home" "BR_INSTALLER_SELF_REEXEC=1" || fail "install_helpers.sh refuses the br opt-out"
-    # install.sh copy
-    (
-        eval "$(sed -n '/^_acfs_clean_runner_env_allowed() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
-        _acfs_clean_runner_env_allowed "$home" "BR_INSTALLER_SELF_REEXEC=1"
-    ) || fail "install.sh refuses the br opt-out"
-    local bad
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    for good in "BR_INSTALLER_SELF_REEXEC=1" "RU_INSTALLER_NO_SELF_REFRESH=1"; do
+        _acfs_clean_runner_env_allowed "$home" "$good" || fail "install_helpers.sh refuses pinned $good"
+        (
+            eval "$(sed -n '/^_acfs_clean_runner_env_allowed() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+            _acfs_clean_runner_env_allowed "$home" "$good"
+        ) || fail "install.sh refuses pinned $good"
+    done
     for bad in "BR_INSTALLER_SELF_REEXEC=0" "BR_INSTALLER_SELF_REEXEC=" "BR_INSTALLER_URL=https://example.invalid/i.sh" \
-        "BR_INSTALLER_BRANCH=main"; do
+        "RU_INSTALLER_NO_SELF_REFRESH=0" "BR_INSTALLER_BRANCH=main"; do
         ! _acfs_clean_runner_env_allowed "$home" "$bad" || fail "install_helpers.sh allows $bad"
         ! (
             eval "$(sed -n '/^_acfs_clean_runner_env_allowed() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
             _acfs_clean_runner_env_allowed "$home" "$bad"
         ) || fail "install.sh allows $bad"
     done
+    # Table-driven, not a static exception: without the table, a pinned value is refused too.
+    unset -f acfs_installer_pin_env_allowed
+    unset ACFS_INSTALLER_PIN_ENV
+    ! _acfs_clean_runner_env_allowed "$home" "BR_INSTALLER_SELF_REEXEC=1" || fail "allowed without the pin table"
+}
+
+@test "mac-flywheel: _acfs_installer_runner_env merges the call site's assignment with the tool's pins" {
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    eval "$(sed -n '/^_acfs_installer_runner_env() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    declare -F _acfs_installer_runner_env >/dev/null || fail "_acfs_installer_runner_env not found in install.sh"
+
+    run _acfs_installer_runner_env ru "RU_NON_INTERACTIVE=1"
+    assert_success
+    assert_output "$(printf 'RU_NON_INTERACTIVE=1\nRU_INSTALLER_NO_SELF_REFRESH=1')"
+
+    run _acfs_installer_runner_env br ""
+    assert_success
+    assert_output "BR_INSTALLER_SELF_REEXEC=1"
+
+    run _acfs_installer_runner_env atuin "ATUIN_NO_MODIFY_PATH=1"
+    assert_success
+    assert_output "ATUIN_NO_MODIFY_PATH=1"
+
+    run _acfs_installer_runner_env xf ""
+    assert_success
+    assert_output ""
+
+    # A variable set twice (call site and pin) is refused, as is a malformed assignment.
+    run _acfs_installer_runner_env br "BR_INSTALLER_SELF_REEXEC=1"
+    assert_failure
+    run _acfs_installer_runner_env xf "A B=1"
+    assert_failure
+
+    # The verified runner uses it.
+    run grep -F '_acfs_installer_runner_env "$tool" "$runner_env_assignment"' "$PROJECT_ROOT/install.sh"
+    assert_success
 }
 
 @test "mac-flywheel: BR_INSTALLER_SELF_REEXEC=1 reaches the installer through the clean runner" {
     local current_user verified_script="$BATS_TEST_TMPDIR/verified-installer.sh"
+    source "$PROJECT_ROOT/scripts/lib/security.sh"   # the pin table allows it
     current_user="$(command id -un)"
     export TARGET_USER="$current_user"
     export TARGET_HOME="$(_acfs_resolve_target_home "$current_user")"
@@ -511,15 +567,18 @@ EOF
     assert_output --partial "reexec=1"
 }
 
-@test "mac-flywheel: install and update run br with its self re-exec disabled" {
-    run grep -F 'acfs_run_verified_upstream_script_as_target_with_env "br" "bash" "BR_INSTALLER_SELF_REEXEC=1"' "$PROJECT_ROOT/install.sh"
+@test "mac-flywheel: br's self re-exec opt-out comes from the pin table, not the call sites" {
+    # Set twice it would be a duplicate the runner refuses, so the call sites must not repeat it.
+    run grep -F 'acfs_run_verified_upstream_script_as_target "br" "bash"' "$PROJECT_ROOT/install.sh"
     assert_success
-    run grep -E 'acfs_run_verified_upstream_script_as_target "br" ' "$PROJECT_ROOT/install.sh"
+    run grep -F 'BR_INSTALLER_SELF_REEXEC=1' "$PROJECT_ROOT/install.sh"
     assert_failure
-    run grep -F 'update_run_verified_installer_with_env br "BR_INSTALLER_SELF_REEXEC=1"' "$PROJECT_ROOT/scripts/lib/update.sh"
-    assert_success
     run grep -E 'update_run_verified_installer br$' "$PROJECT_ROOT/scripts/lib/update.sh"
+    assert_success
+    run grep -F 'BR_INSTALLER_SELF_REEXEC=1' "$PROJECT_ROOT/scripts/lib/update.sh"
     assert_failure
+    run grep -F '[br]="BR_INSTALLER_SELF_REEXEC=1"' "$PROJECT_ROOT/scripts/lib/security.sh"
+    assert_success
 }
 
 @test "run_as_target_runner strips loader controls before its first external command" {

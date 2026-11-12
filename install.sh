@@ -5324,9 +5324,12 @@ _acfs_clean_runner_env_allowed() {
     local leaf=""
     local component=""
 
-    # BR_INSTALLER_SELF_REEXEC=1: mac-flywheel local fix (br.sh would otherwise exec main's install.sh).
+    # mac-flywheel local: exactly the pinned assignments in security.sh ACFS_INSTALLER_PIN_ENV are allowed too.
+    if declare -F acfs_installer_pin_env_allowed >/dev/null 2>&1 && acfs_installer_pin_env_allowed "$assignment"; then
+        return 0
+    fi
     case "$assignment" in
-        ATUIN_NO_MODIFY_PATH=1|AM_INSTALL_SKIP_MCP_SETUP=1|AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1|RU_NON_INTERACTIVE=1|BR_INSTALLER_SELF_REEXEC=1)
+        ATUIN_NO_MODIFY_PATH=1|AM_INSTALL_SKIP_MCP_SETUP=1|AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1|RU_NON_INTERACTIVE=1)
             return 0
             ;;
         "GROK_BIN_DIR=$user_home/.local/bin")
@@ -6334,6 +6337,32 @@ acfs_load_upstream_checksums() {
     return 0
 }
 
+# mac-flywheel local (never proposed upstream). _acfs_installer_runner_env <tool> <call-site assignment>:
+# prints the assignments a verified installer gets, one per line: the call site's (if any), then the tool's
+# pins from security.sh ACFS_INSTALLER_PIN_ENV. Fails on a malformed assignment or a variable set twice.
+_acfs_installer_runner_env() {
+    local tool="${1:-}" call_site="${2:-}" line="" names=":"
+    local -a assignments=()
+    [[ -z "$call_site" ]] || assignments+=("$call_site")
+    if declare -F acfs_installer_pin_env >/dev/null 2>&1; then
+        while IFS= read -r line; do
+            [[ -z "$line" ]] || assignments+=("$line")
+        done < <(acfs_installer_pin_env "$tool")
+    fi
+    for line in "${assignments[@]}"; do
+        if [[ ! "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=[^[:space:]]+$ ]]; then
+            log_error "Invalid inline env assignment for upstream installer '$tool': $line"
+            return 1
+        fi
+        if [[ "$names" == *":${BASH_REMATCH[1]}:"* ]]; then
+            log_error "Upstream installer '$tool' sets ${BASH_REMATCH[1]} twice (call site and pin)"
+            return 1
+        fi
+        names+="${BASH_REMATCH[1]}:"
+        printf '%s\n' "$line"
+    done
+}
+
 acfs_run_verified_upstream_script_as_target_with_env() {
     if [[ $# -lt 2 ]]; then
         log_error "acfs_run_verified_upstream_script_as_target_with_env requires a tool and runner"
@@ -6367,11 +6396,16 @@ acfs_run_verified_upstream_script_as_target_with_env() {
         ACFS_LAST_MODULE_FAILURE_REASON="missing dependency"
         return 1
     fi
-    if [[ -n "$runner_env_assignment" ]] && [[ ! "$runner_env_assignment" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+$ ]]; then
-        log_error "Invalid inline env assignment for upstream installer '$tool': $runner_env_assignment"
+    # mac-flywheel local: the call site's assignment plus the tool's pinned ones, validated.
+    local runner_env_lines="" runner_env_line=""
+    local -a runner_env_assignments=()
+    if ! runner_env_lines="$(_acfs_installer_runner_env "$tool" "$runner_env_assignment")"; then
         ACFS_LAST_MODULE_FAILURE_REASON="environment setup"
         return 1
     fi
+    while IFS= read -r runner_env_line; do
+        [[ -z "$runner_env_line" ]] || runner_env_assignments+=("$runner_env_line")
+    done <<< "$runner_env_lines"
 
     local staged_installer=""
     acfs_stage_verified_installer \
@@ -6459,18 +6493,14 @@ acfs_run_verified_upstream_script_as_target_with_env() {
     if [[ "$tool" == "uv" ]]; then
         runner_options+=(--acfs-require-sha256sum)
     fi
-    if [[ -n "$runner_env_assignment" && -n "$tmpdir_assignment" ]]; then
-        run_as_target_runner "${runner_options[@]}" env "$runner_env_assignment" "$tmpdir_assignment" \
-            "$runner" -s -- "$@" < "$staged_installer" || run_status=$?
-    elif [[ -n "$tmpdir_assignment" ]]; then
-        run_as_target_runner "${runner_options[@]}" env "$tmpdir_assignment" \
-            "$runner" -s -- "$@" < "$staged_installer" || run_status=$?
-    elif [[ -n "$runner_env_assignment" ]]; then
-        run_as_target_runner "${runner_options[@]}" env "$runner_env_assignment" \
-            "$runner" -s -- "$@" < "$staged_installer" || run_status=$?
-    else
-        run_as_target_runner "${runner_options[@]}" "$runner" -s -- "$@" < "$staged_installer" || run_status=$?
+    # mac-flywheel local: any number of assignments (call site + pins), then TMPDIR, as before.
+    local -a runner_env_prefix=()
+    [[ -z "$tmpdir_assignment" ]] || runner_env_assignments+=("$tmpdir_assignment")
+    if [[ ${#runner_env_assignments[@]} -gt 0 ]]; then
+        runner_env_prefix=(env "${runner_env_assignments[@]}")
     fi
+    run_as_target_runner "${runner_options[@]}" "${runner_env_prefix[@]}" \
+        "$runner" -s -- "$@" < "$staged_installer" || run_status=$?
 
     _acfs_remove_temp_files "$staged_installer"
     # Remove this run's low-space TMPDIR whatever the installer did. Only the
@@ -10892,9 +10922,8 @@ UNIT_EOF
         log_detail "Beads Rust already installed"
     else
         log_detail "Installing Beads Rust"
-        # mac-flywheel local fix: run from stdin, br's installer downloads main's install.sh and execs it
-        # instead of these verified, frozen bytes. BR_INSTALLER_SELF_REEXEC=1 is its own opt-out.
-        acfs_try_module_step "stack.beads_rust" "Installing Beads Rust" acfs_run_verified_upstream_script_as_target_with_env "br" "bash" "BR_INSTALLER_SELF_REEXEC=1" || acfs_optional_module_install_failed "br" "Beads Rust"
+        # mac-flywheel local: br's self re-exec opt-out is pinned in security.sh ACFS_INSTALLER_PIN_ENV.
+        acfs_try_module_step "stack.beads_rust" "Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash" || acfs_optional_module_install_failed "br" "Beads Rust"
     fi
 
     # Beads Viewer

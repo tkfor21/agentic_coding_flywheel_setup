@@ -2735,6 +2735,8 @@ EOF
     local installer="$PROJECT_ROOT/install.sh"
 
     eval "$(sed -n '/^acfs_run_verified_upstream_script_as_target_with_env()/,/^}$/p' "$installer")"
+    # mac-flywheel: the wrapper builds its env through this helper (call site + pinned assignments).
+    eval "$(sed -n '/^_acfs_installer_runner_env()/,/^}$/p' "$installer")"
 
     declare -gA ACFS_UPSTREAM_URLS=()
     declare -gA ACFS_UPSTREAM_SHA256=()
@@ -2955,6 +2957,8 @@ EOF
     chmod +x "$trusted_df" "$trusted_awk"
 
     eval "$(sed -n '/^acfs_run_verified_upstream_script_as_target_with_env()/,/^}$/p' "$installer")"
+    # mac-flywheel: the wrapper builds its env through this helper (call site + pinned assignments).
+    eval "$(sed -n '/^_acfs_installer_runner_env()/,/^}$/p' "$installer")"
 
     declare -gA ACFS_UPSTREAM_URLS=([example]="$url")
     declare -gA ACFS_UPSTREAM_SHA256=([example]="$expected_sha")
@@ -3090,6 +3094,8 @@ EOF
     export ACFS_VERIFIED_INSTALLER_CACHE="$HOME/explicit-installer-cache"
 
     eval "$(sed -n '/^acfs_run_verified_upstream_script_as_target_with_env()/,/^}$/p' "$installer")"
+    # mac-flywheel: the wrapper builds its env through this helper (call site + pinned assignments).
+    eval "$(sed -n '/^_acfs_installer_runner_env()/,/^}$/p' "$installer")"
 
     declare -gA ACFS_UPSTREAM_URLS=([example]="$url")
     declare -gA ACFS_UPSTREAM_SHA256=([example]="$expected_sha")
@@ -15599,11 +15605,10 @@ EOF
     local br_line
     local bv_line
 
-    # mac-flywheel: br runs through the _with_env form (BR_INSTALLER_SELF_REEXEC=1).
-    run grep -F 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target_with_env "br" "bash"' "$PROJECT_ROOT/install.sh"
+    run grep -F 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash"' "$PROJECT_ROOT/install.sh"
     assert_success
 
-    br_line="$(grep -n 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target_with_env "br" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
+    br_line="$(grep -n 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
     bv_line="$(grep -n 'Installing Beads Viewer" acfs_run_verified_upstream_script_as_target "bv" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
 
     [[ -n "$br_line" ]]
@@ -15959,6 +15964,35 @@ holds:
     reason: "0.5.2 cannot read beads DBs"
     expiry: "2099-01-02"
 EOF
+}
+
+# mac-flywheel local: `acfs update` passes each tool's pinned assignments (security.sh ACFS_INSTALLER_PIN_ENV)
+# along with the call site's own, exactly as install.sh does.
+@test "mac-flywheel: update_installer_env_with_pins merges the call site's env with the tool's pins" {
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    declare -F update_installer_env_with_pins >/dev/null || fail "update_installer_env_with_pins not defined"
+
+    run update_installer_env_with_pins ru "RU_NON_INTERACTIVE=1"
+    assert_success
+    assert_output "$(printf 'RU_NON_INTERACTIVE=1\nRU_INSTALLER_NO_SELF_REFRESH=1')"
+
+    run update_installer_env_with_pins br ""
+    assert_success
+    assert_output "BR_INSTALLER_SELF_REEXEC=1"
+
+    run update_installer_env_with_pins slb "INSTALL_DIR=/tmp/x"
+    assert_success
+    assert_output "INSTALL_DIR=/tmp/x"
+
+    # A variable set twice (call site and pin) is refused.
+    run update_installer_env_with_pins br "BR_INSTALLER_SELF_REEXEC=1"
+    assert_failure
+
+    # The verified runner applies it once security.sh (and so the table) is loaded.
+    local fn
+    fn="$(declare -f update_run_verified_installer_with_env)"
+    [[ "$fn" == *'update_installer_env_with_pins "$tool" "$bash_env_assignment"'* ]] || fail "the runner doesn't merge pins"
+    [[ "${fn%%update_installer_env_with_pins*}" == *update_require_security* ]] || fail "pins merged before security.sh is loaded"
 }
 
 @test "holds: verified installer skips a held tool with owner/reason/expiry named" {

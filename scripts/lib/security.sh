@@ -711,6 +711,38 @@ declare -gA KNOWN_INSTALLERS=(
 )
 declare -ga ACFS_SECURITY_REQUIRED_INSTALLERS=("${!KNOWN_INSTALLERS[@]}")
 
+# mac-flywheel local (never proposed upstream): per-installer environment pins, the one place they live.
+# install.sh (_acfs_installer_runner_env) and `acfs update` (update_installer_env_with_pins) pass a tool's
+# entries to its verified installer along with the call site's own assignment, and the clean runner allows
+# exactly these values (acfs_installer_pin_env_allowed). Several assignments per tool are newline-separated;
+# a variable may not repeat one the call site already sets. Joel's rule (2026-11-01): hold what is true at
+# refresh time, so pins change only in a deliberate bring-to-current.
+#   br: run from stdin, its installer would exec main's install.sh instead of the verified bytes (br.sh:62-92).
+#   ru: its self-refresh can't fire under bash 5.2 today; pinned off anyway so it can't start to.
+declare -gA ACFS_INSTALLER_PIN_ENV=(
+    [br]="BR_INSTALLER_SELF_REEXEC=1"
+    [ru]="RU_INSTALLER_NO_SELF_REFRESH=1"
+)
+
+# acfs_installer_pin_env <tool>: the tool's pinned assignments, one per line (nothing when it has none).
+acfs_installer_pin_env() {
+    local tool="${1:-}"
+    [[ -n "$tool" && -n "${ACFS_INSTALLER_PIN_ENV[$tool]:-}" ]] || return 0
+    printf '%s\n' "${ACFS_INSTALLER_PIN_ENV[$tool]}"
+}
+
+# acfs_installer_pin_env_allowed <assignment>: success only when it is exactly one pinned entry.
+acfs_installer_pin_env_allowed() {
+    local assignment="${1:-}" tool="" line=""
+    [[ -n "$assignment" ]] || return 1
+    for tool in "${!ACFS_INSTALLER_PIN_ENV[@]}"; do
+        while IFS= read -r line; do
+            [[ "$line" == "$assignment" ]] && return 0
+        done <<< "${ACFS_INSTALLER_PIN_ENV[$tool]}"
+    done
+    return 1
+}
+
 # ============================================================
 # Checksum Verification Policy
 # ============================================================

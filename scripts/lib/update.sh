@@ -6106,6 +6106,30 @@ update_verified_installer_runner() {
     _installer_runner_ref=("$installer_timeout_bin" --signal=KILL "$installer_timeout" "$installer_bash_bin")
 }
 
+# mac-flywheel local (never proposed upstream), the `acfs update` twin of install.sh's _acfs_installer_runner_env.
+# update_installer_env_with_pins <tool> <call-site env>: prints the call site's newline-separated assignments followed
+# by the tool's pins from security.sh ACFS_INSTALLER_PIN_ENV. Fails when a variable is set twice.
+update_installer_env_with_pins() {
+    local tool="${1:-}" env_lines="${2:-}" line="" names=":" out=""
+    if declare -F acfs_installer_pin_env >/dev/null 2>&1; then
+        local pinned=""
+        pinned="$(acfs_installer_pin_env "$tool")"
+        [[ -z "$pinned" ]] || env_lines="${env_lines:+$env_lines$'\n'}$pinned"
+    fi
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -n "$line" ]] || continue
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]]; then
+            if [[ "$names" == *":${BASH_REMATCH[1]}:"* ]]; then
+                echo "The $tool installer sets ${BASH_REMATCH[1]} twice (call site and pin)" >&2
+                return 1
+            fi
+            names+="${BASH_REMATCH[1]}:"
+        fi
+        out+="$line"$'\n'
+    done <<< "$env_lines"
+    printf '%s' "${out%$'\n'}"
+}
+
 # shellcheck disable=SC2317,SC2329  # invoked indirectly via run_cmd()
 update_run_verified_installer_with_env() {
     if [[ $# -lt 1 ]]; then
@@ -6159,6 +6183,9 @@ update_run_verified_installer_with_env() {
         echo "Missing or invalid checksum entry for $tool in checksums.yaml" >&2
         return "$UPDATE_EXIT_CHECKSUM"
     fi
+
+    # mac-flywheel local: the tool's pinned assignments (security.sh, loaded just above) join the call site's.
+    bash_env_assignment="$(update_installer_env_with_pins "$tool" "$bash_env_assignment")" || return 1
 
     if [[ -n "$bash_env_assignment" ]]; then
         local env_assignment=""
@@ -9438,9 +9465,8 @@ update_stack() {
     run_cmd "Beads Viewer" update_run_verified_installer bv
 
     # Beads Rust (br) - local issue tracker CLI - always install/update.
-    # mac-flywheel local fix: BR_INSTALLER_SELF_REEXEC=1 stops br's installer from exec'ing main's install.sh
-    # in place of the verified, frozen bytes.
-    run_cmd "Beads Rust" update_run_verified_installer_with_env br "BR_INSTALLER_SELF_REEXEC=1"
+    # mac-flywheel local: its self re-exec opt-out is pinned in security.sh ACFS_INSTALLER_PIN_ENV.
+    run_cmd "Beads Rust" update_run_verified_installer br
 
     # CASS - always install/update. Its upstream installer uses a lock inside
     # TMPDIR; give it an ACFS-owned target-user temp root so stale shared
