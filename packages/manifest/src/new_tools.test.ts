@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { parseManifestFile } from "./parser.js";
 import type { Manifest, Module, ModuleWebMetadata, VerifiedInstaller } from "./types.js";
+import { isFrozenInstallerUrl } from "./validate.js";
 import { detectDependencyCycles, validateDependencyExistence } from "./validate.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -273,7 +274,10 @@ describe("New tool manifest entries", () => {
         expect(["bash", "sh"]).toContain(verifiedInstaller.runner);
         expect(verifiedInstaller.url).toBeTruthy();
         expect(checksumEntry).toBeDefined();
-        expect(checksumEntry?.url).toBe(verifiedInstaller.url);
+        // mac-flywheel: checksums.yaml holds a frozen form of the manifest URL (commit, tag or vendored copy).
+        expect(
+          isFrozenInstallerUrl(verifiedInstaller.url ?? "", checksumEntry?.url ?? "", tool.installerTool),
+        ).toBe(true);
         expect(checksumEntry?.sha256).toMatch(/^[a-f0-9]{64}$/i);
       });
     });

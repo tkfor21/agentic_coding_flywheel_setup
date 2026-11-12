@@ -738,6 +738,94 @@ modules:
     expect(validationErrors[0]?.code).toBe("VERIFIED_INSTALLER_URL_MISMATCH");
   });
 
+  // mac-flywheel local fix: checksums.yaml freezes each installer to immutable bytes
+  // (scripts/mac-flywheel/freeze-installers.sh), so its URL is a frozen form of the manifest URL.
+  describe("frozen installer URLs (mac-flywheel)", () => {
+    const sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const commit = "0123456789abcdef0123456789abcdef01234567";
+    const manifestFor = (url: string) => `
+version: 1
+name: test
+id: test
+defaults:
+  user: ubuntu
+  workspace_root: /data
+  mode: vibe
+modules:
+  - id: stack.rch
+    description: Remote Compilation Helper
+    install: []
+    verified_installer:
+      tool: rch
+      url: ${url}
+      runner: bash
+    verify:
+      - rch --version
+`;
+    const errorsFor = (manifestUrl: string, checksumsUrl: string) => {
+      const parseResult = parseManifestString(manifestFor(manifestUrl));
+      expect(parseResult.success).toBe(true);
+      if (!parseResult.success || !parseResult.data) return ["parse failed"];
+      return validateVerifiedInstallerChecksums(parseResult.data, {
+        rch: { url: checksumsUrl, sha256: sha },
+      }).map((e) => e.code);
+    };
+    const raw = "https://raw.githubusercontent.com/Dicklesworthstone/remote_compilation_helper";
+
+    test("accepts the same repo and path pinned to a commit", () => {
+      expect(errorsFor(`${raw}/main/install.sh`, `${raw}/${commit}/install.sh`)).toEqual([]);
+      expect(errorsFor(`${raw}/refs/heads/main/install.sh`, `${raw}/${commit}/install.sh`)).toEqual([]);
+    });
+
+    test("accepts a release tag for a releases/latest URL", () => {
+      expect(
+        errorsFor(
+          "https://github.com/atuinsh/atuin/releases/latest/download/atuin-installer.sh",
+          "https://github.com/atuinsh/atuin/releases/download/v18.24.6/atuin-installer.sh",
+        ),
+      ).toEqual([]);
+    });
+
+    test("accepts a vendored copy of this tool at a commit", () => {
+      expect(
+        errorsFor(
+          "https://example.com/install.sh",
+          `https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/${commit}/vendor/installers/rch.sh`,
+        ),
+      ).toEqual([]);
+    });
+
+    test("still rejects lookalikes", () => {
+      const mismatch = ["VERIFIED_INSTALLER_URL_MISMATCH"];
+      // another repo or path at a commit
+      expect(errorsFor(`${raw}/main/install.sh`, `${raw}-evil/${commit}/install.sh`)).toEqual(mismatch);
+      expect(errorsFor(`${raw}/main/install.sh`, `${raw}/${commit}/other.sh`)).toEqual(mismatch);
+      // another branch, or a short ref, is not a freeze
+      expect(errorsFor(`${raw}/main/install.sh`, `${raw}/dev/install.sh`)).toEqual(mismatch);
+      expect(errorsFor(`${raw}/main/install.sh`, `${raw}/0123456/install.sh`)).toEqual(mismatch);
+      // a release of another repo or asset
+      expect(
+        errorsFor(
+          "https://github.com/atuinsh/atuin/releases/latest/download/atuin-installer.sh",
+          "https://github.com/evil/atuin/releases/download/v1/atuin-installer.sh",
+        ),
+      ).toEqual(mismatch);
+      // a vendored copy of a different tool, or not at a commit
+      expect(
+        errorsFor(
+          "https://example.com/install.sh",
+          `https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/${commit}/vendor/installers/other.sh`,
+        ),
+      ).toEqual(mismatch);
+      expect(
+        errorsFor(
+          "https://example.com/install.sh",
+          "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/main/vendor/installers/rch.sh",
+        ),
+      ).toEqual(mismatch);
+    });
+  });
+
   test("rejects malformed verified installer checksums", () => {
     const yaml = `
 version: 1
