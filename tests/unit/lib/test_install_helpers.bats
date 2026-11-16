@@ -960,6 +960,16 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     ! acfs_installer_pin_env_allowed "RU_UNSAFE_MAIN=1" || fail "the clean runner must never allow RU_UNSAFE_MAIN"
 }
 
+@test "mac-flywheel: apr is pinned to 1.4.1 and installs no dependencies (environment pins)" {
+    # Without APR_VERSION, apr's installer downloads apr from its main branch; with it, that release's asset. Its
+    # dependency step would `npm install -g @steipete/oracle` (newest) and fetch gum's newest release; APR_NO_DEPS=1
+    # turns that off (Joel, 2026-11-16: keep today's state, no Oracle).
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "$(acfs_installer_pin_env apr)" == $'APR_VERSION=1.4.1\nAPR_NO_DEPS=1' ]] || fail "apr env pins: '$(acfs_installer_pin_env apr)'"
+    [[ -z "${ACFS_INSTALLER_PIN_ARGS[apr]:-}" ]] || fail "apr takes no version argument"
+    ! acfs_installer_pin_env_allowed "APR_SKIP_VERIFY=1" || fail "the clean runner must never allow APR_SKIP_VERIFY"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
