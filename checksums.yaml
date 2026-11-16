@@ -39,8 +39,8 @@ installers:
     sha256: "63ed7d17bb229e2edb1791fff4d7455ad054d9f3f778eaf6abb215073ac02c7e"
 
   casr:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/cross_agent_session_resumer/fac8916527c8f4c77ab0bb75bafe0be8a81b7f74/install.sh"
-    sha256: "ffa8f56326d4886f6470fb54b8c3fe3d5c0d890f0cbbbeed116f41f6a086c963"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/d2bcbdbe12b91b7f505cbf06462488a8ce33f9dd/vendor/installers/casr.sh"
+    sha256: "e241342b74fa9081ce2c8bd579a677f68732d763cc41bd7ad048571d699a3830"
 
   cass:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_session_search/852edcfd79fe91bf15170ed5ed09081bf115bc70/install.sh"

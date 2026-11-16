@@ -781,6 +781,8 @@ ACFS_AST_GREP_PINNED_VERSION="0.51.2"
 #        Vendored copy too: --easy-mode no longer falls back to a source build (live rustup, nightly, main clone).
 #   pt (step 5, 2026-11-16): 2.3.0 (no "v"; its installer adds it), what e2e 20261116-050346's acfs doctor reported
 #        (also pt's newest release). Vendored copy too: no self-refresh from main, no main wrapper, no source build.
+#   casr (step 5, 2026-11-16): v0.4.1 (acfs-local runs casr 0.4.1; doctor doesn't report its version; also casr's
+#        newest release). Vendored copy too: no fallback to the latest release's agent skill.
 #   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
 #         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
@@ -788,6 +790,7 @@ declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [brenner_bot]=$'--version\nv0.4.1'
     [bun]="bun-v1.4.4"
     [caam]="--version=v0.1.25"
+    [casr]=$'--version\nv0.4.1'
     [cass]=$'--version\nv0.11.0'
     [cm]=$'--version\nv0.5.1'
     [csctf]=$'--version\nv0.4.6'
