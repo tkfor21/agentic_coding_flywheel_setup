@@ -75,8 +75,8 @@ installers:
     sha256: "fcd2dabd46c16baf24a45beb331ebfb27a076a86e0348cae57239a07f0ddcc6c"
 
   fsfs:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/7d899e67f21efa59796ca06ff13a71f9fa932c92/install.sh"
-    sha256: "75832d4bd6297c4ccd39d2abae58c76c0a506e655b77255dd9ccbbc7fc704a7c"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/66c155f6cd4e47685c07a1fe3189f37d1632cee5/vendor/installers/fsfs.sh"
+    sha256: "01cb43138cbdedbddb3294e9425f04c1e1fa7008ef0e67f7abfbbdb5aa0537ba"
 
   gemini_patch:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/misc_coding_agent_tips_and_scripts/c2b401e7b4968bbf99f0a95efe7bf5f27e673aaa/fix-gemini-cli-ebadf-crash.sh"
