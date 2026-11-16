@@ -1035,6 +1035,25 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: pi installs a fixed release, never main's skill or a source build (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/pi.sh"
+    run _mf_vendored_entry_ok pi
+    assert_success
+    run grep -Fx 'VERSION="v0.8.0"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[pi]:-}" == $'--version\nv0.8.0' ]] || fail "pi pin: '${ACFS_INSTALLER_PIN_ARGS[pi]:-<none>}'"
+    # The original takes the agent skill from main when the pinned tag's fetch fails, and builds from source (the tag's
+    # toolchain file pulls nightly-2026-08-31) after a failed download, a glibc mismatch, or on an unknown platform.
+    ! grep -F 'refs+=("main")' "$copy" || fail "main is still an agent-skill source"
+    ! grep -F 'falling back to source build' "$copy" || fail "the download-failure source build remains"
+    ! grep -F 'Falling back to building pi from source' "$copy" || fail "the glibc source build remains"
+    ! grep -F 'switching to --from-source' "$copy" || fail "the unknown-platform source build remains"
+    run bash "$copy" --version latest --no-gum
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh

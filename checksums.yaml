@@ -135,8 +135,8 @@ installers:
     sha256: "b1e22d637bc464332b236627ff1dcae12f343ce04248fe0b8d9548d89f9169f3"
 
   pi:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/pi_agent_rust/9374541d81f4584da80aa23156e9a656df008e75/install.sh"
-    sha256: "467001baec1f304511e82e8e9485e292c78f2023645ee367889b6b06fabed8a3"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/0f4cbb41c2fea4a65876e08d66bc47a1e3d0080c/vendor/installers/pi.sh"
+    sha256: "1b799981283d6af780c89fdb7364adb216cee1866ae6df4cdf64061238f7f03a"
 
   pt:
     url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/c0ad4dbd4a35563180ec3220652f878ae3b7d4f6/vendor/installers/pt.sh"
