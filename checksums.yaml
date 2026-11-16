@@ -15,8 +15,8 @@ installers:
     sha256: "9069cd335b79bab7047271bbabb2ba018423a3a4fb95916c4ee9d5f11582bd94"
 
   atuin:
-    url: "https://github.com/atuinsh/atuin/releases/download/v18.24.6/atuin-installer.sh"
-    sha256: "a30cdd4af613f352f7e533f8a5416b25978d788664f6bb63ad224d4f2fd66b63"
+    url: "https://github.com/atuinsh/atuin/releases/download/v18.24.8/atuin-installer.sh"
+    sha256: "40aaede9e5e74e3ac1e1563c486a3b5abff4e60aada88f2400d221c9ff2f60fe"
 
   br:
     url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/3be2568dbb72a47b0a346cbaf4142257b3e567a7/vendor/installers/br.sh"
