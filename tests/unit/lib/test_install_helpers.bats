@@ -970,6 +970,22 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     ! acfs_installer_pin_env_allowed "APR_SKIP_VERIFY=1" || fail "the clean runner must never allow APR_SKIP_VERIFY"
 }
 
+@test "mac-flywheel: casr installs a fixed release and never takes the latest release's skill (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/casr.sh"
+    run _mf_vendored_entry_ok casr
+    assert_success
+    run grep -Fx 'VERSION="v0.4.1"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[casr]:-}" == $'--version\nv0.4.1' ]] || fail "casr pin: '${ACFS_INSTALLER_PIN_ARGS[casr]:-<none>}'"
+    # v0.4.1 ships no skill.tar.gz, so the original falls back to releases/latest's skill: today none exists and the
+    # frozen inline skill is written, but the next release that ships one would change what every install gets.
+    ! grep -F 'releases/latest/download/skill.tar.gz' "$copy" || fail "the latest release's skill is still a fallback"
+    run bash "$copy" --version latest --no-gum
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
