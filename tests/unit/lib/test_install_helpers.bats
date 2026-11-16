@@ -777,6 +777,29 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     [[ -z "${ACFS_INSTALLER_PIN_ARGS[dsr]:-}" ]] || fail "dsr must not also get a --version pin"
 }
 
+# mac-flywheel local, phase 2 step 4: mdwb has no releases; its installer clones the default branch (or pulls main)
+# and always installs its own uv 0.13.0 over ACFS's (#60). A reviewed vendored copy clones a frozen fork tag and
+# keeps an existing uv.
+@test "mac-flywheel: mdwb installs a frozen fork tag and keeps ACFS's uv (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/mdwb.sh" url sha
+    [[ -f "$copy" ]] || fail "no vendored mdwb installer"
+    url="$(awk '$0=="  mdwb:"{getline; print}' "$PROJECT_ROOT/checksums.yaml" | sed -E 's/.*url: "//; s/"$//')"
+    [[ "$url" =~ ^https://raw\.githubusercontent\.com/tkfor21/agentic_coding_flywheel_setup/[0-9a-f]{40}/vendor/installers/mdwb\.sh$ ]] \
+        || fail "checksums.yaml mdwb URL is not the vendored copy at a commit: $url"
+    sha="$(awk '$0=="  mdwb:"{getline; getline; print}' "$PROJECT_ROOT/checksums.yaml" | grep -o '[0-9a-f]\{64\}')"
+    [[ "$(sha256sum "$copy" | cut -d' ' -f1)" == "$sha" ]] || fail "vendored mdwb.sh doesn't match its checksums.yaml hash"
+    run grep -F 'https://github.com/tkfor21/markdown_web_browser.git' "$copy"
+    assert_success
+    run grep -F 'MDWB_PINNED_REF="mf-28edccfe"' "$copy"
+    assert_success
+    run grep -F 'clone --branch "$MDWB_PINNED_REF"' "$copy"
+    assert_success
+    run grep -F 'pull --ff-only origin main' "$copy"
+    assert_failure
+    run grep -E 'command_exists uv' "$copy"
+    assert_success
+}
+
 @test "mac-flywheel: install and update both apply argument pins" {
     run grep -F 'acfs_installer_args_with_pins "$tool" "$@"' "$PROJECT_ROOT/install.sh"
     assert_success
