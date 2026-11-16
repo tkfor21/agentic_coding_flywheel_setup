@@ -63,8 +63,8 @@ installers:
     sha256: "abe33abdbd9146e8f93c70d98d43ba16177d1d7ddf7245d9e2b0d5b68946779d"
 
   dsr:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/doodlestein_self_releaser/8b41bbd95087e77428437d71a274e902cae1b792/install.sh"
-    sha256: "2680dc30f76382cade53c40f26f804ed4e641b0c520eb8be279954ba2f529462"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/cc7ef9aa97d77875f736d680d3798d3065618141/vendor/installers/dsr.sh"
+    sha256: "f681338460d139076aaf946f2e6328d062fe4deaab3ba01f977b0d7c5172514a"
 
   ee:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/eidetic_engine_cli/620a8558b4d4fdbb46e20d66dd596781881efa16/install.sh"

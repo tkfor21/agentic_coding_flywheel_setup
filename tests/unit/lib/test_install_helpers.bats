@@ -758,6 +758,25 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     assert_failure
 }
 
+# mac-flywheel local, phase 2 step 4: dsr's installer clones a branch by name (default main) and hardcodes its
+# repo, so no knob can pin a commit. A reviewed vendored copy clones the dsr fork at a frozen tag instead.
+@test "mac-flywheel: dsr installs from a frozen tag on the dsr fork (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/dsr.sh" url sha
+    [[ -f "$copy" ]] || fail "no vendored dsr installer"
+    url="$(awk '$0=="  dsr:"{getline; print}' "$PROJECT_ROOT/checksums.yaml" | sed -E 's/.*url: "//; s/"$//')"
+    [[ "$url" =~ ^https://raw\.githubusercontent\.com/tkfor21/agentic_coding_flywheel_setup/[0-9a-f]{40}/vendor/installers/dsr\.sh$ ]] \
+        || fail "checksums.yaml dsr URL is not the vendored copy at a commit: $url"
+    sha="$(awk '$0=="  dsr:"{getline; getline; print}' "$PROJECT_ROOT/checksums.yaml" | grep -o '[0-9a-f]\{64\}')"
+    [[ "$(sha256sum "$copy" | cut -d' ' -f1)" == "$sha" ]] || fail "vendored dsr.sh doesn't match its checksums.yaml hash"
+    run grep -E '^OWNER="tkfor21"$' "$copy"
+    assert_success
+    run grep -F 'CLONE_REFS+=("mf-725df35a")' "$copy"
+    assert_success
+    run grep -F 'CLONE_REFS+=("main")' "$copy"
+    assert_failure
+    [[ -z "${ACFS_INSTALLER_PIN_ARGS[dsr]:-}" ]] || fail "dsr must not also get a --version pin"
+}
+
 @test "mac-flywheel: install and update both apply argument pins" {
     run grep -F 'acfs_installer_args_with_pins "$tool" "$@"' "$PROJECT_ROOT/install.sh"
     assert_success
