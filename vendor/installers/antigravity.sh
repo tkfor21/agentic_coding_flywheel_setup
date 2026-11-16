@@ -119,7 +119,15 @@ fetch_manifest() {
     fi
 }
 
-manifest_json=$(fetch_manifest "$MANIFEST_URL" 2>/dev/null || true)
+# mac-flywheel local patch (vendored copy; the original's sha256 is 62966c07...): use this recorded linux_arm64
+# manifest (1.5.9, what the last passing e2e 20261116-024249 installed; the URL is versioned) instead of the server's
+# "latest" one. The sha512 check below still verifies the payload. Other platforms aren't frozen, so they refuse.
+if [ "$platform" = "linux_arm64" ]; then
+    manifest_json='{"version":"1.5.9","url":"https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.9-4515810895593472/linux-arm/cli_linux_arm64.tar.gz","sha512":"16c632a09b81f598f7652bc11180861f9d2ee4408ffa161dadc83b2010de7a9cd055e97b4b46cd01903e35c0e8bf21d8262462ba7c5f168cc6dada9ac3d522c0"}'
+else
+    echo "Fatal: mac-flywheel pins the Antigravity CLI for linux_arm64 only (this is $platform)." >&2
+    exit 1
+fi
 if [ -z "$manifest_json" ]; then
     echo "Fatal: Could not connect to the release server to download the manifest. Please check your internet connection or firewall settings." >&2
     exit 1

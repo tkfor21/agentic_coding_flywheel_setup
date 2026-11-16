@@ -95,6 +95,10 @@ ZSH="${ZSH:-$HOME/.oh-my-zsh}"
 REPO=${REPO:-ohmyzsh/ohmyzsh}
 REMOTE=${REMOTE:-https://github.com/${REPO}.git}
 BRANCH=${BRANCH:-master}
+# mac-flywheel local patch (vendored copy; the original is tools/install.sh at f5d571c, sha256 3f9f1b62...): clone
+# exactly OMZ_PINNED_SHA (ohmyzsh master at 2026-11-09 12:36 UTC, its tip when the last passing e2e, 20261116-024249,
+# ran) instead of master's tip, and refuse anything else. ACFS's zshrc keeps omz updates in "reminder" mode.
+OMZ_PINNED_SHA="6010fb6260f359e71d99ba25f05f9215809b3ed2"
 
 # Other options
 CHSH=${CHSH:-yes}
@@ -336,8 +340,9 @@ setup_ohmyzsh() {
   && git config oh-my-zsh.remote origin \
   && git config oh-my-zsh.branch "$BRANCH" \
   && git remote add origin "$REMOTE" \
-  && git fetch --depth=1 origin \
-  && git checkout -b "$BRANCH" "origin/$BRANCH" || {
+  && git fetch --depth=1 origin "$OMZ_PINNED_SHA" \
+  && git checkout -b "$BRANCH" "$OMZ_PINNED_SHA" \
+  && [ "$(git rev-parse HEAD)" = "$OMZ_PINNED_SHA" ] || {
     [ ! -d "$ZSH" ] || {
       cd -
       rm -rf "$ZSH" 2>/dev/null
