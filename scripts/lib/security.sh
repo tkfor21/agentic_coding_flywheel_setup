@@ -1026,6 +1026,9 @@ ACFS_FSFS_PINNED_VERSION="v1.12.3"
 #        release). Vendored copy too: no releases/latest download aliases, no automatic source build.
 #   pi (step 5, 2026-11-16): v0.8.0 (acfs-local runs pi 0.8.0; doctor doesn't report its version; also pi's newest
 #        release). Vendored copy too: the agent skill never comes from main, and no automatic source build.
+#   mcp_agent_mail (ACFS rebase onto cb24196d, 2026-11-16): v0.3.40 (doctor reports "am 0.3.40"; also the newest
+#        release). Its newer reviewed installer (upstream's df93f144, frozen at mcp_agent_mail_rust b9df0023) resolves
+#        releases/latest without --version. install.sh and update.sh run it inline and apply these pins explicitly.
 #   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
 #         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
@@ -1040,6 +1043,7 @@ declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [dcg]=$'--version\nv0.16.0'
     [ee]=$'--version\nv0.18.0'
     [fmd]=$'--version\nv0.7.0'
+    [mcp_agent_mail]=$'--version\nv0.3.40'
     [ms]=$'--version\nv0.3.0'
     [ntm]="--version=v1.38.0"
     [opencode]=$'--version\n1.19.5'

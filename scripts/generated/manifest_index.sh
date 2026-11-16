@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="035a100223b467297e3fd99d1206a28e22f93a526994991d761fd96813c52298"
+ACFS_MANIFEST_SHA256="dd794755b51d018596301afc257eac27724132892e595b3c9fd3af9cec42ac38"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -661,7 +661,7 @@ declare -gA ACFS_MODULE_DESC=(
   ['network.ssh_keepalive']="Configure SSH server keepalive to prevent VPN/NAT disconnects"
   ['lang.bun']="Bun runtime for JS tooling and global CLIs"
   ['lang.uv']="uv Python tooling (fast venvs)"
-  ['lang.rust']="Rust nightly + cargo"
+  ['lang.rust']="Rust 1.100.0 (pinned stable) + cargo"
   ['lang.go']="Go toolchain"
   ['lang.nvm']="nvm + latest Node.js"
   ['tools.atuin']="Atuin CLI with guarded agent-safe shim"
@@ -747,7 +747,7 @@ grep -qE '\''^ClientAliveInterval[[:space:]]+[1-9]'\'' /etc/ssh/sshd_config 2>/d
   ['lang.uv']='test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/uv" || test -x "$HOME/.local/bin/uv"'
   ['lang.rust']='test -x ~/.cargo/bin/cargo'
   ['lang.go']='command -v go'
-  ['lang.nvm']='test -d ~/.nvm && ls ~/.nvm/versions/node/ 2>/dev/null | grep -q .'
+  ['lang.nvm']='test -x ~/.nvm/versions/node/v26.13.1/bin/node'
   ['tools.atuin']='test -x ~/.atuin/bin/atuin && test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin" && grep -Fq "agent hook integration disabled by ACFS" "${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin"'
   ['tools.zoxide']='command -v zoxide'
   ['tools.ast_grep']='command -v sg'
@@ -1313,14 +1313,14 @@ user_login_shell_configured'
   ['lang.bun.0']='~/.bun/bin/bun --version'
   ['lang.uv.0']='command -v uv >/dev/null 2>&1 && uv --version'
   ['lang.rust.0']='~/.cargo/bin/cargo --version'
-  ['lang.rust.1']='~/.cargo/bin/rustup show | grep -q nightly'
+  ['lang.rust.1']='~/.cargo/bin/rustc --version | grep -q '\''^rustc 1\.100\.0 '\'''
   ['lang.go.0']='go version'
   ['lang.nvm.0']='export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 node --version'
   ['tools.atuin.0']='~/.atuin/bin/atuin --version'
   ['tools.zoxide.0']='command -v zoxide'
-  ['tools.ast_grep.0']='sg --version'
+  ['tools.ast_grep.0']='~/.cargo/bin/ast-grep --version | grep -qx '\''ast-grep 0\.51\.2'\'''
   ['agents.claude.0']='target_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"
 "$target_bin/claude" --version || "$target_bin/claude" --help'
   ['agents.codex.0']='target_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"

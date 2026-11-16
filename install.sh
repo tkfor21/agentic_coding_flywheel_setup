@@ -10651,7 +10651,19 @@ NTM_CONFIG_EOF
                 if [[ -n "$ACFS_TMP_INSTALL" ]] && verify_checksum "$url" "$expected_sha256" "$tool" > "$ACFS_TMP_INSTALL"; then
                     chmod 755 "$ACFS_TMP_INSTALL" 2>/dev/null || true
 
-                    if try_step "Installing MCP Agent Mail" run_as_target_runner env "AM_INSTALL_SKIP_MCP_SETUP=1" "AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1" bash "$ACFS_TMP_INSTALL" --dest "$target_dir" --yes; then
+                    # mac-flywheel local: this inline run bypasses the standard runner, so apply the pinned
+                    # arguments (security.sh ACFS_INSTALLER_PIN_ARGS: --version v0.3.40) here too; without
+                    # --version the installer resolves releases/latest.
+                    local -a am_installer_args=()
+                    local am_installer_arg=""
+                    if acfs_installer_args_with_pins "$tool" --dest "$target_dir" --yes >/dev/null; then
+                        while IFS= read -r -d '' am_installer_arg; do
+                            am_installer_args+=("$am_installer_arg")
+                        done < <(acfs_installer_args_with_pins "$tool" --dest "$target_dir" --yes)
+                    fi
+                    if [[ ${#am_installer_args[@]} -eq 0 ]]; then
+                        log_error "MCP Agent Mail: could not apply its pinned installer arguments"
+                    elif try_step "Installing MCP Agent Mail" run_as_target_runner env "AM_INSTALL_SKIP_MCP_SETUP=1" "AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1" bash "$ACFS_TMP_INSTALL" "${am_installer_args[@]}"; then
                     # Symlink repair/normalization: prefer the freshly installed
                     # Rust CLI even if an older am is already on PATH.
                     run_as_target env "ACFS_AGENT_MAIL_TARGET_DIR=$target_dir" bash -c '

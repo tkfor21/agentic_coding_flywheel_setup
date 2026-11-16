@@ -8587,6 +8587,9 @@ update_nvm_and_node() {
     local nvm_dir="$1" target_user="" current_user="" name=""
     local nvm_env="" current_version="" approved_version="" probe_rc=0 node_rc=0
     local -a nvm_runner=()
+    # mac-flywheel local: the one Node version this update installs and makes the default.
+    local pinned_node=""
+    pinned_node="$(update_pinned_node_version)" || return 1
     target_user="$(update_target_user)" || return 1
     current_user="$(update_current_user)" || return 1
     update_verified_installer_runner nvm_runner || return 1
@@ -8700,6 +8703,9 @@ update_nvm_and_node() {
                 exit 0
                 ;;
         esac
+        # mac-flywheel local: Node is pinned (security.sh ACFS_NODE_PINNED_VERSION, passed as $2). Install exactly that
+        # release, never what nvm'"'"'s `node`/`lts/*` alias or the old default resolves to.
+        selector="v$2"
 
         install_args=()
         previous_node=$(nvm which default 2>/dev/null) || previous_node=""
@@ -8733,10 +8739,10 @@ update_nvm_and_node() {
             exit 1
         fi
         printf "Node.js %s\n" "$node_version"
-        if [[ "$had_default" == false ]]; then
-            nvm alias default node || exit $?
-        fi
-    ' acfs-nvm "$approved_version" || node_rc=$?
+        # mac-flywheel local: the default is always the pinned release (v-prefixed: acfs.zshrc reads it directly), never
+        # `node` (latest).
+        nvm alias default "$desired_version" || exit $?
+    ' acfs-nvm "$approved_version" "$pinned_node" || node_rc=$?
     # Only the checksum wrapper may classify a refusal as result 95.
     [[ "$node_rc" -ne "$UPDATE_EXIT_CHECKSUM" ]] || node_rc=1
     return "$node_rc"
@@ -10879,6 +10885,21 @@ update_agent_mail_impl() {
             fi
             am_payload_inventory="${am_stage[0]}"
             am_release_args=(--version "${am_release[1]}" --artifact-url "${am_stage[1]}" --checksum "${am_release[3]}" --offline)
+        fi
+        if [[ ${#am_release_args[@]} -eq 0 ]] && declare -F acfs_installer_args_with_pins >/dev/null 2>&1; then
+            # mac-flywheel local: the release-reuse contract only accepts the moving refs/heads/main URL, so with
+            # the frozen one it never supplies a version, and without --version the installer resolves
+            # releases/latest. Apply the pinned arguments (security.sh ACFS_INSTALLER_PIN_ARGS: --version v0.3.40),
+            # as update_run_verified_installer_with_env does: security.sh is loaded whenever verify_checksum is.
+            local am_pin_arg=""
+            if ! acfs_installer_args_with_pins "$tool" >/dev/null; then
+                rm -f -- "$tmp_install"
+                update_finish_cmd_fail "MCP Agent Mail" "could not apply its pinned installer arguments"
+                return 0
+            fi
+            while IFS= read -r -d '' am_pin_arg; do
+                am_release_args+=("$am_pin_arg")
+            done < <(acfs_installer_args_with_pins "$tool")
         fi
         update_release_receipt invalidate "$tool" '{}' >/dev/null 2>&1 || true
         log_item run "MCP Agent Mail"

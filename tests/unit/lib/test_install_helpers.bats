@@ -1077,6 +1077,36 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     [[ "$(acfs_installer_pin_env srps)" == "SRPS_SYSMONI_REF=v1.4.3" ]] || fail "srps env pin: '$(acfs_installer_pin_env srps)'"
 }
 
+@test "mac-flywheel: upstream's acfs update Node maintenance installs only the pinned Node" {
+    # Upstream af8d3095 added update_nvm_and_node: it resolved nvm's `node` (latest) or the old default alias with
+    # `nvm version-remote` and set the default to `node`. It must install and default to the pinned version.
+    local update="$PROJECT_ROOT/scripts/lib/update.sh"
+    run grep -F 'pinned_node="$(update_pinned_node_version)" || return 1' "$update"
+    assert_success
+    run grep -F 'selector="v$2"' "$update"
+    assert_success
+    run grep -F "acfs-nvm \"\$approved_version\" \"\$pinned_node\"" "$update"
+    assert_success
+    run grep -F 'nvm alias default "$desired_version"' "$update"
+    assert_success
+}
+
+@test "mac-flywheel: MCP Agent Mail installs v0.3.40 on every path, never the installer's latest" {
+    # The reviewed installer (b9df0023, upstream's newer one, frozen at a commit) resolves releases/latest unless given
+    # --version. stack.sh uses the standard verified runner (the pin table applies); install.sh and update.sh run the
+    # installer inline, so they apply the same pins explicitly. update's release-reuse contract only accepts the moving
+    # refs/heads/main URL, so for the frozen URL it never supplies a version.
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[mcp_agent_mail]:-}" == $'--version\nv0.3.40' ]] \
+        || fail "mcp_agent_mail pin: '${ACFS_INSTALLER_PIN_ARGS[mcp_agent_mail]:-<none>}'"
+    run grep -F 'acfs_installer_args_with_pins "$tool" --dest "$target_dir" --yes' "$PROJECT_ROOT/install.sh"
+    assert_success
+    run grep -F 'done < <(acfs_installer_args_with_pins "$tool")' "$PROJECT_ROOT/scripts/lib/update.sh"
+    assert_success
+    run grep -E 'mcp_agent_mail_rust/[0-9a-f]{40}/install\.sh' "$PROJECT_ROOT/checksums.yaml"
+    assert_success
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
