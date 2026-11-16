@@ -171,8 +171,8 @@ installers:
     sha256: "d7712a54f34d8be4164f0da1f439ddc6c097800e0598faf516ecabca68388dca"
 
   srps:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/system_resource_protection_script/07621deb5a93abe2c4b60a0f336e79870ff9749a/install.sh"
-    sha256: "dd6014c07c7146bbc89d1e25a9ed5b093db2ebdd7a6066e5f47a8f325d4393d9"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/084581f2af0c5c6199a0f5311d7b144b7873d4c8/vendor/installers/srps.sh"
+    sha256: "ce45b312249c9b2780cf464c71114f146cc59d2b6f70e148ad019494711f7077"
 
   tru:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/toon_rust/5be0992fb978faef6f8f1aabc9ea38dbee4ec56f/install.sh"

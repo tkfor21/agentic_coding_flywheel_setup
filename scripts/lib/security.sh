@@ -727,6 +727,8 @@ declare -ga ACFS_SECURITY_REQUIRED_INSTALLERS=("${!KNOWN_INSTALLERS[@]}")
 #        2026-11-02). Without it, apr's installer downloads apr from main; with it, that release's asset, with no
 #        fallback. APR_NO_DEPS=1 (Joel): its dependency step would `npm install -g @steipete/oracle` (newest) and
 #        fetch gum's newest release. Oracle isn't installed today, so this keeps that state. gum: mac-flywheel#77.
+#   srps (step 5, 2026-11-16): SRPS_SYSMONI_REF=v1.4.3 (srps's newest release; ships sysmoni-linux-arm64). The vendored
+#        installer also pins ananicy-cpp (3554447c) and the CachyOS rules (03ef03fb) by commit; srps has no --version.
 #   rch (step 5, 2026-11-16): 2.1.36, what e2e 20261116-052847's acfs doctor reported (also rch's newest release). Its
 #        installer has no --version flag (an unknown flag exits 1) and reads only $VERSION. Vendored copy too, with
 #        the same default and no automatic source build (its tag's toolchain file pulls a nightly).
@@ -737,6 +739,7 @@ declare -gA ACFS_INSTALLER_PIN_ENV=(
     [giil]="GIIL_VERSION=3.2.1"
     [rch]="VERSION=2.1.36"
     [apr]=$'APR_VERSION=1.4.1\nAPR_NO_DEPS=1'
+    [srps]="SRPS_SYSMONI_REF=v1.4.3"
 )
 
 # mac-flywheel local: the ONE Node version ACFS installs, an exact stable LTS release. Never "latest" (nvm's `node`
