@@ -770,6 +770,23 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: xf installs a fixed release and never falls back to a source build (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/xf.sh"
+    run _mf_vendored_entry_ok xf
+    assert_success
+    run grep -Fx 'VERSION="v0.4.3"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[xf]:-}" == $'--version\nv0.4.3' ]] || fail "xf pin: '${ACFS_INSTALLER_PIN_ARGS[xf]:-<none>}'"
+    # ACFS passes --easy-mode, under which the original builds from source after a failed download or with no prebuilt
+    # artifact: it pipes the live sh.rustup.rs into sh with a nightly default toolchain, and clones main if the tag
+    # clone fails. The copy fails instead.
+    ! grep -F 'falling back to build-from-source' "$copy" || fail "an automatic source build remains"
+    run bash "$copy" --version latest --easy-mode --no-gum
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
