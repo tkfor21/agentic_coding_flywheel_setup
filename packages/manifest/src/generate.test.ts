@@ -1043,15 +1043,16 @@ describe("Generated verified installer args", () => {
     expect(stackContent).toContain("local -a fsfs_installer_args=('--easy-mode')");
     expect(stackContent).toContain('fsfs_target="x86_64-unknown-linux-musl"');
     expect(stackContent).toContain('fsfs_target="aarch64-unknown-linux-musl"');
+    // mac-flywheel local: the pinned version (security.sh ACFS_FSFS_PINNED_VERSION) or the $ACFS_FSFS_VERSION
+    // override, never a release list or releases/latest.
     expect(stackContent).toContain(
+      'fsfs_candidate="${ACFS_FSFS_VERSION:-${ACFS_FSFS_PINNED_VERSION:-}}"',
+    );
+    expect(stackContent).not.toContain(
       "https://github.com/Dicklesworthstone/frankensearch/releases/latest",
     );
-    expect(stackContent).toContain(
+    expect(stackContent).not.toContain(
       "https://api.github.com/repos/Dicklesworthstone/frankensearch/releases?per_page=10",
-    );
-    expect(stackContent).toContain("done < <(acfs_curl --connect-timeout 30 --max-time 60");
-    expect(stackContent).toContain(
-      'fsfs_candidate="$(acfs_curl --connect-timeout 30 --max-time 60',
     );
     expect(stackContent).toContain('fsfs_checksum="$(acfs_curl --connect-timeout 30 --max-time 60');
     expect(stackContent).not.toContain("done < <(curl -fsSL --connect-timeout 30 --max-time 60");
