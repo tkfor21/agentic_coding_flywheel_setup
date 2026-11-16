@@ -3532,6 +3532,45 @@ EOF
     assert_output "$HOME/.local/bin/zoxide"
 }
 
+# mac-flywheel local (#60 part 2): uv is frozen at the fork's pinned, checksum-verified installer, so `acfs update`
+# reinstalls that instead of running `uv self update`, which moves uv to whatever is latest.
+_mf_stub_update_uv_env() {
+    UPDATE_RUNTIME=true
+    CALLS="$BATS_TEST_TMPDIR/calls"; : > "$CALLS"
+    update_binary_path() { echo "$HOME/.local/bin/uv"; }
+    capture_version_before() { :; }
+    capture_version_after() { return 1; }
+    log_section() { :; }
+    log_item() { echo "log_item $*" >> "$CALLS"; }
+    run_cmd_attempt_with_retry() { echo "attempt $*" >> "$CALLS"; }
+    update_run_bounded_in_target_context() { echo "bounded $*" >> "$CALLS"; }
+    update_run_verified_installer_with_shell_repair() { echo "verified $*" >> "$CALLS"; }
+}
+
+@test "mac-flywheel: update_uv reinstalls the pinned verified installer, never uv self update" {
+    _mf_stub_update_uv_env
+    update_require_security() { return 0; }
+    run update_uv
+    assert_success
+    run grep -E '^verified .* uv update_repair_uv_install$' "$CALLS"
+    assert_success
+    run grep -E 'self.update' "$CALLS"
+    assert_failure
+}
+
+@test "mac-flywheel: update_uv fails closed without verification instead of self-updating" {
+    _mf_stub_update_uv_env
+    update_require_security() { return 1; }
+    run update_uv
+    assert_success
+    run grep -E '^verified ' "$CALLS"
+    assert_failure
+    run grep -E '^(attempt|bounded) .*self.update' "$CALLS"
+    assert_failure
+    run grep -F 'log_item fail uv' "$CALLS"
+    assert_success
+}
+
 @test "update_repair_uv_install: normalizes custom shim to target local bin" {
     export ACFS_BIN_DIR="$HOME/custom-bin"
     mkdir -p "$HOME/.local/bin" "$ACFS_BIN_DIR"
@@ -15580,9 +15619,10 @@ EOF
     assert_success
     run grep -F 'apt-get upgrade -y --fix-missing' "$update"
     assert_success
+    # mac-flywheel (#60): uv no longer self-updates; it reinstalls the pinned verified installer.
     run grep -F 'run_cmd_attempt_with_retry "uv self-update"' "$update"
-    assert_success
-    run grep -F 'update_run_verified_installer_with_shell_repair "uv verified installer fallback" "uv" update_repair_uv_install' "$update"
+    assert_failure
+    run grep -F 'update_run_verified_installer_with_shell_repair "uv (pinned verified installer)" "uv" update_repair_uv_install' "$update"
     assert_success
 }
 

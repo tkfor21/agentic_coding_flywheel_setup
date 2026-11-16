@@ -9893,12 +9893,14 @@ update_uv() {
     # Capture version before update
     capture_version_before "uv"
 
-    if ! run_cmd_attempt_with_retry "uv self-update" update_run_bounded_in_target_context "$uv_bin" self update; then
-        if update_require_security; then
-            update_run_verified_installer_with_shell_repair "uv verified installer fallback" "uv" update_repair_uv_install || true
-        else
-            log_item "fail" "uv self-update" "failed and checksum-verified installer fallback is unavailable"
-        fi
+    # mac-flywheel local (never proposed upstream, #60): uv is frozen at the fork's pinned, checksum-verified
+    # installer (vendor/installers/uv.sh, uv 0.13.8), the same one install.sh runs. `uv self update` would move it to
+    # whatever is latest, so `acfs update` reinstalls the pinned installer instead, and never self-updates. Joel's
+    # rule (2026-11-01): hold what is true at refresh time; uv changes only in a deliberate bring-to-current.
+    if update_require_security; then
+        update_run_verified_installer_with_shell_repair "uv (pinned verified installer)" "uv" update_repair_uv_install || true
+    else
+        log_item "fail" "uv" "checksum-verified installer unavailable; not running uv self update (pins hold)"
     fi
 
     # Show version change without double-counting
