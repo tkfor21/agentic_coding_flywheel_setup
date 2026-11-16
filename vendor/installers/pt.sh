@@ -1,0 +1,1420 @@
+#!/usr/bin/env bash
+#
+# install.sh - Process Triage (pt) Installer
+#
+# One-line install (with cache buster):
+#   curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/process_triage/main/install.sh?$(date +%s)" | bash
+#
+# One-line install (stable URL):
+#   curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/process_triage/main/install.sh | bash
+#
+# Common options:
+#   --version 2.0.5        Install a specific release
+#   --dest ~/.local/bin    Install into a custom directory
+#   --system               Install into /usr/local/bin
+#   --easy-mode            Update shell PATH files automatically
+#   --verify               Enforce checksum + signature verification
+#   --from-source          Build pt-core from source
+#   --offline FILE         Install from a local pt-core tarball
+#                          Version inferred from bundle name or local VERSION file
+#   --quiet                Suppress non-error output
+#   --no-gum               Disable gum formatting
+#   --force                Reinstall even if target version is already present
+#   --no-configure         Skip agent auto-configuration and skill install
+#   --emit-skill-payload   Print the canonical skill SKILL.md to stdout and exit
+#
+set -euo pipefail
+umask 022
+shopt -s lastpipe 2>/dev/null || true
+
+OWNER="${OWNER:-Dicklesworthstone}"
+REPO="${REPO:-process_triage}"
+GITHUB_REPO="${OWNER}/${REPO}"
+RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
+RELEASES_URL="https://github.com/${GITHUB_REPO}/releases"
+API_URL="https://api.github.com/repos/${GITHUB_REPO}"
+
+DEST_DEFAULT="$HOME/.local/bin"
+DEST="${DEST:-$DEST_DEFAULT}"
+# mac-flywheel local patch (vendored copy; the original's bytes, process_triage 558c1018 install.sh, are sha256
+# bd52767e...). Changes, each marked: the default release is 2.3.0 (what e2e 20261116-050346 installed, per acfs
+# doctor), not "latest" and not $PT_VERSION/$PT_CORE_VERSION from the environment; "latest" or an empty version is
+# refused; no self-refresh from main's live install.sh; main's pt wrapper is no longer a download fallback; and neither
+# a failed pt-core download nor an unknown platform builds from source. An explicit --from-source is unchanged; ACFS
+# never passes it.
+VERSION="2.3.0"
+CORE_VERSION=""
+SYSTEM=0
+EASY_MODE=0
+QUIET=0
+NO_GUM=0
+FORCE_INSTALL=0
+FROM_SOURCE=0
+# Honor VERIFY=1 from the environment (documented; `curl ... | VERIFY=1 bash`).
+# A plain VERIFY=0 here silently discarded it, so "verified" installs were not.
+VERIFY="${VERIFY:-0}"
+NO_CONFIGURE=0
+NO_VERIFY=0
+VERIFY_SELF=0
+EMIT_SKILL_PAYLOAD=0
+OFFLINE_BUNDLE=""
+LOCK_ROOT="${PT_INSTALL_LOCK_DIR:-/tmp/pt-install.lock.d}"
+LOCK_HELD=0
+TEMP_DIR=""
+HAS_GUM=0
+OS=""
+ARCH=""
+PLATFORM=""
+PROXY_ARGS=()
+DOWNLOADED_ARTIFACT=""
+INSTALLED_WRAPPER_VERSION=""
+INSTALLED_CORE_VERSION=""
+AGENT_LINES=()
+BACKUP_LINES=()
+
+CLAUDE_STATUS="skipped"
+CODEX_STATUS="skipped"
+COPILOT_STATUS="skipped"
+CURSOR_STATUS="skipped"
+WINDSURF_STATUS="skipped"
+GEMINI_STATUS="skipped"
+CLAUDE_SKILL_STATUS="skipped"
+CODEX_SKILL_STATUS="skipped"
+
+# Release-signing keys this installer trusts: SHA-256 of each key's DER
+# SubjectPublicKeyInfo, i.e.
+#   openssl pkey -pubin -in release-signing-public.pem -outform der | sha256sum
+# A --verify install rejects a release whose release-signing-public.pem is not
+# one of these, even if every signature checks out against it. Rotating keys:
+# add the new fingerprint in a release still signed by the current key, sign
+# later releases with the new key, then drop the old entry. Keep the list in
+# pt (the wrapper) identical.
+#   b5084da8... ECDSA P-256, first used for v2.2.0
+TRUSTED_RELEASE_KEY_FINGERPRINTS="b5084da80f9652304307fa7c3f965ee7840d3815fd863c2b40f4524e00e2e4ee"
+
+strip_ansi() {
+    sed $'s/\033\\[[0-9;]*m//g'
+}
+
+detect_gum() {
+    if command -v gum >/dev/null 2>&1 && [[ -t 1 ]] && [[ "$NO_GUM" -eq 0 ]]; then
+        HAS_GUM=1
+    fi
+}
+
+info() {
+    [[ "$QUIET" -eq 1 ]] && return 0
+    if [[ "$HAS_GUM" -eq 1 ]]; then
+        gum style --foreground 39 "→ $*"
+    else
+        printf '\033[0;34m→\033[0m %s\n' "$*"
+    fi
+}
+
+ok() {
+    [[ "$QUIET" -eq 1 ]] && return 0
+    if [[ "$HAS_GUM" -eq 1 ]]; then
+        gum style --foreground 42 "✓ $*"
+    else
+        printf '\033[0;32m✓\033[0m %s\n' "$*"
+    fi
+}
+
+warn() {
+    [[ "$QUIET" -eq 1 ]] && return 0
+    if [[ "$HAS_GUM" -eq 1 ]]; then
+        gum style --foreground 214 "⚠ $*"
+    else
+        printf '\033[1;33m⚠\033[0m %s\n' "$*"
+    fi
+}
+
+err() {
+    if [[ "$HAS_GUM" -eq 1 ]]; then
+        gum style --foreground 196 "✗ $*" >&2
+    else
+        printf '\033[0;31m✗\033[0m %s\n' "$*" >&2
+    fi
+}
+
+run_with_spinner() {
+    local title="$1"
+    shift
+    if [[ "$HAS_GUM" -eq 1 && "$QUIET" -eq 0 ]]; then
+        gum spin --spinner dot --title "$title" -- "$@"
+    else
+        info "$title"
+        "$@"
+    fi
+}
+
+draw_box() {
+    local color="$1"
+    shift
+    local lines=("$@")
+    local max_width=0
+    local line stripped len pad
+
+    for line in ${lines[@]+"${lines[@]}"}; do
+        stripped=$(printf '%b' "$line" | strip_ansi)
+        len=${#stripped}
+        [[ "$len" -gt "$max_width" ]] && max_width="$len"
+    done
+
+    local border=""
+    local inner_width=$((max_width + 4))
+    local i
+    for ((i = 0; i < inner_width; i++)); do
+        border+="═"
+    done
+
+    printf "\033[%sm╔%s╗\033[0m\n" "$color" "$border"
+    for line in ${lines[@]+"${lines[@]}"}; do
+        stripped=$(printf '%b' "$line" | strip_ansi)
+        len=${#stripped}
+        pad=$((max_width - len))
+        printf "\033[%sm║\033[0m  %b%*s  \033[%sm║\033[0m\n" "$color" "$line" "$pad" "" "$color"
+    done
+    printf "\033[%sm╚%s╝\033[0m\n" "$color" "$border"
+}
+
+status_path() {
+    local path="$1"
+    if [[ -n "${HOME:-}" && "$path" == "$HOME"/* ]]; then
+        # shellcheck disable=SC2088 # This is display text, not an executable shell path.
+        printf '~/%s\n' "${path#"$HOME"/}"
+    else
+        printf '%s\n' "$path"
+    fi
+}
+
+show_header() {
+    [[ "$QUIET" -eq 1 ]] && return 0
+    if [[ "$HAS_GUM" -eq 1 ]]; then
+        gum style \
+            --border normal \
+            --border-foreground 39 \
+            --padding "0 1" \
+            --margin "1 0" \
+            "$(gum style --foreground 42 --bold 'pt installer')" \
+            "$(gum style --foreground 245 'Safety-first process triage with signed releases and agent integration')"
+    else
+        echo ""
+        draw_box "0;36" \
+            "\033[1;32mpt installer\033[0m" \
+            "Safety-first process triage with signed releases and agent integration"
+        echo ""
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+Process Triage installer
+
+Usage:
+  bash install.sh [options]
+
+Options:
+  --version <ver>      Install a specific version
+  --dest <dir>         Install directory (default: ~/.local/bin)
+  --system             Install to /usr/local/bin
+  --easy-mode          Update shell PATH files automatically
+  --verify             Require checksum + signature verification
+  --verify-self        Run post-install diagnostics
+  --from-source        Build pt-core from source
+  --offline <file>     Install pt-core from a local tarball
+                       Version inferred from bundle name or local VERSION file
+  --force              Reinstall even if already at target version
+  --quiet              Suppress non-error output
+  --no-gum             Disable gum formatting
+  --no-configure       Skip agent init + skill install
+  --no-verify          Disable checksum/signature verification
+  --emit-skill-payload Print the canonical skill SKILL.md to stdout and exit
+  -h, --help           Show help
+
+Environment:
+  PT_VERSION                              Version override
+  PT_CORE_VERSION                         pt-core version override
+  PT_SYSTEM=1                             System install shortcut
+  PT_NO_PATH=1                            Skip PATH updates
+  PT_INSTALL_LOCK_DIR                     Installer lock dir (default /tmp/pt-install.lock.d)
+  VERIFY=1                                Require verification
+  PT_RELEASE_PUBLIC_KEY_FILE              PEM file for release verification
+  PT_RELEASE_PUBLIC_KEY_PEM               PEM contents for release verification
+  PT_RELEASE_PUBLIC_KEY_FINGERPRINT       Accepted key fingerprint(s), comma/space
+                                          separated; replaces the built-in pin list
+  PT_RELEASE_PUBLIC_KEY_FINGERPRINT_FILE  File of accepted fingerprints (first field
+                                          of each line); replaces the built-in list
+  HTTP_PROXY / HTTPS_PROXY / NO_PROXY     Proxy support
+EOF
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --version)
+                [[ -n "${2:-}" ]] || { err "--version requires a value"; exit 1; }
+                VERSION="$2"
+                shift 2
+                ;;
+            --dest)
+                [[ -n "${2:-}" ]] || { err "--dest requires a value"; exit 1; }
+                DEST="$2"
+                shift 2
+                ;;
+            --system)
+                SYSTEM=1
+                shift
+                ;;
+            --easy-mode)
+                EASY_MODE=1
+                shift
+                ;;
+            --verify)
+                VERIFY=1
+                shift
+                ;;
+            --verify-self)
+                VERIFY_SELF=1
+                shift
+                ;;
+            --from-source)
+                FROM_SOURCE=1
+                shift
+                ;;
+            --offline)
+                [[ -n "${2:-}" ]] || { err "--offline requires a file path"; exit 1; }
+                OFFLINE_BUNDLE="$2"
+                shift 2
+                ;;
+            --force)
+                FORCE_INSTALL=1
+                shift
+                ;;
+            --quiet)
+                QUIET=1
+                shift
+                ;;
+            --no-gum)
+                NO_GUM=1
+                shift
+                ;;
+            --no-configure)
+                NO_CONFIGURE=1
+                shift
+                ;;
+            --no-verify)
+                NO_VERIFY=1
+                shift
+                ;;
+            --emit-skill-payload)
+                EMIT_SKILL_PAYLOAD=1
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                err "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+        esac
+    done
+
+    if [[ "${PT_SYSTEM:-0}" == "1" ]]; then
+        SYSTEM=1
+    fi
+    if [[ "${VERIFY:-0}" == "1" ]]; then
+        VERIFY=1
+    else
+        VERIFY=0
+    fi
+    if [[ "$NO_VERIFY" -eq 1 ]]; then
+        VERIFY=0
+    fi
+}
+
+setup_proxy() {
+    PROXY_ARGS=()
+    if [[ -n "${HTTPS_PROXY:-}" ]]; then
+        PROXY_ARGS=(--proxy "$HTTPS_PROXY")
+    elif [[ -n "${HTTP_PROXY:-}" ]]; then
+        PROXY_ARGS=(--proxy "$HTTP_PROXY")
+    fi
+}
+
+fetch_stdout() {
+    local url="$1"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL ${PROXY_ARGS[@]+"${PROXY_ARGS[@]}"} --connect-timeout 10 --max-time 120 "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O - "$url"
+    else
+        err "Neither curl nor wget is available"
+        return 1
+    fi
+}
+
+download() {
+    local url="$1"
+    local output="$2"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL ${PROXY_ARGS[@]+"${PROXY_ARGS[@]}"} --connect-timeout 10 --max-time 120 "$url" -o "$output"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O "$output" "$url"
+    else
+        err "Neither curl nor wget is available"
+        return 1
+    fi
+}
+
+append_cache_buster() {
+    local url="$1"
+    local ts
+    ts=$(date +%s)
+    if [[ "$url" == *"?"* ]]; then
+        printf '%s&cb=%s\n' "$url" "$ts"
+    else
+        printf '%s?cb=%s\n' "$url" "$ts"
+    fi
+}
+
+infer_version_from_text() {
+    local text="$1"
+    if [[ "$text" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    return 1
+}
+
+infer_version_from_offline_bundle() {
+    local bundle_path="$1"
+    infer_version_from_text "$(basename "$bundle_path")"
+}
+
+resolve_local_version_file() {
+    local candidate=""
+
+    if [[ -f "./VERSION" ]]; then
+        candidate="$(tr -d '[:space:]' < ./VERSION)"
+        infer_version_from_text "$candidate" && return 0
+    fi
+
+    if [[ -f "$(dirname "$0")/VERSION" ]]; then
+        candidate="$(tr -d '[:space:]' < "$(dirname "$0")/VERSION")"
+        infer_version_from_text "$candidate" && return 0
+    fi
+
+    return 1
+}
+
+copy_local_verification_file() {
+    local output="$1"
+    shift
+    local candidate
+    for candidate in "$@"; do
+        [[ -n "$candidate" && -f "$candidate" ]] || continue
+        cp "$candidate" "$output"
+        return 0
+    done
+    return 1
+}
+
+prepare_offline_release_public_key() {
+    local output="$1"
+    local script_dir
+    script_dir="$(dirname "$0")"
+
+    if [[ -n "${PT_RELEASE_PUBLIC_KEY_FILE:-}" ]]; then
+        cp "${PT_RELEASE_PUBLIC_KEY_FILE}" "$output"
+    elif [[ -n "${PT_RELEASE_PUBLIC_KEY_PEM:-}" ]]; then
+        printf '%s\n' "${PT_RELEASE_PUBLIC_KEY_PEM}" > "$output"
+    elif ! copy_local_verification_file \
+        "$output" \
+        "./release-signing-public.pem" \
+        "${script_dir}/release-signing-public.pem" \
+        "$(dirname "$OFFLINE_BUNDLE")/release-signing-public.pem"; then
+        err "Offline verification requires a local release-signing-public.pem"
+        err "Provide PT_RELEASE_PUBLIC_KEY_FILE/PT_RELEASE_PUBLIC_KEY_PEM or place the PEM beside install.sh, the current directory, or the offline bundle"
+        return 1
+    fi
+
+    openssl pkey -pubin -in "$output" -noout >/dev/null 2>&1 || {
+        err "Invalid release public key PEM"
+        return 1
+    }
+
+    check_release_key_pin "$output"
+}
+
+prepare_offline_checksums() {
+    local output="$1"
+    local script_dir
+    script_dir="$(dirname "$0")"
+
+    if ! copy_local_verification_file \
+        "$output" \
+        "./checksums.sha256" \
+        "${script_dir}/checksums.sha256" \
+        "$(dirname "$OFFLINE_BUNDLE")/checksums.sha256"; then
+        err "Offline verification requires a local checksums.sha256"
+        err "Place checksums.sha256 beside install.sh, the current directory, or the offline bundle"
+        return 1
+    fi
+}
+
+verify_file_signature_offline() {
+    local file_path="$1"
+    local artifact_name="$2"
+    local pubkey_file="$3"
+    local sig_output="$4"
+    shift 4
+
+    copy_local_verification_file "$sig_output" "$@" || {
+        err "Offline verification requires a local signature for ${artifact_name}"
+        return 1
+    }
+
+    if openssl dgst -sha256 -verify "$pubkey_file" -signature "$sig_output" "$file_path" >/dev/null 2>&1; then
+        ok "${artifact_name} signature verified"
+        return 0
+    fi
+    err "Signature verification failed for ${artifact_name}"
+    return 1
+}
+
+cleanup() {
+    [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR"
+    if [[ "$LOCK_HELD" -eq 1 && -d "$LOCK_ROOT" ]]; then
+        rm -rf "$LOCK_ROOT"
+    fi
+}
+
+create_temp_dir() {
+    TEMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t pt.XXXXXXXX 2>/dev/null)"
+    if [[ -z "$TEMP_DIR" || ! -d "$TEMP_DIR" ]]; then
+        err "Failed to create temporary directory"
+        exit 1
+    fi
+    trap cleanup EXIT
+}
+
+maybe_self_refresh() {
+    # mac-flywheel local patch: the original re-executed main's live install.sh here when stdin was a pipe, which
+    # would bypass this reviewed copy. Never refresh.
+    return 0
+}
+
+detect_platform() {
+    OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    ARCH="$(uname -m)"
+
+    case "$ARCH" in
+        x86_64|amd64) ARCH="x86_64" ;;
+        arm64|aarch64) ARCH="aarch64" ;;
+        *)
+            err "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+    esac
+
+    if [[ "$OS" == "linux" && -f /proc/version ]] && grep -qi microsoft /proc/version 2>/dev/null; then
+        warn "WSL detected; continuing with Linux install"
+    fi
+
+    case "$OS" in
+        linux)
+            if [[ -f /etc/alpine-release ]] || (command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl); then
+                PLATFORM="linux-${ARCH}-musl"
+            else
+                PLATFORM="linux-${ARCH}"
+            fi
+            ;;
+        darwin)
+            PLATFORM="macos-${ARCH}"
+            ;;
+        *)
+            err "Unsupported operating system: $OS"
+            exit 1
+            ;;
+    esac
+
+    case "$PLATFORM" in
+        linux-x86_64|linux-aarch64|linux-x86_64-musl|linux-aarch64-musl|macos-x86_64|macos-aarch64) ;;
+        *)
+            # mac-flywheel local patch: no automatic source build.
+            err "No prebuilt pt-core for ${PLATFORM}; refusing to build from source"
+            exit 1
+            ;;
+    esac
+}
+
+resolve_version() {
+    if [[ -n "$VERSION" ]]; then
+        return 0
+    fi
+
+    if [[ -n "$OFFLINE_BUNDLE" ]]; then
+        VERSION="$(infer_version_from_offline_bundle "$OFFLINE_BUNDLE" || true)"
+        if [[ -z "$VERSION" ]]; then
+            VERSION="$(resolve_local_version_file || true)"
+        fi
+        if [[ -z "$VERSION" ]]; then
+            err "Offline mode requires --version or a versioned bundle filename"
+            err "Example: pt-core-linux-x86_64-2.0.5.tar.gz"
+            exit 1
+        fi
+        return 0
+    fi
+
+    local latest=""
+    latest="$(fetch_stdout "${API_URL}/releases/latest" 2>/dev/null | jq -r '.tag_name // empty' 2>/dev/null || true)"
+    latest="${latest#v}"
+    if [[ -z "$latest" ]]; then
+        latest="$(
+            curl -fsSL ${PROXY_ARGS[@]+"${PROXY_ARGS[@]}"} --connect-timeout 10 --max-time 20 -o /dev/null -w '%{url_effective}' \
+                "${RELEASES_URL}/latest" 2>/dev/null \
+                | sed -nE 's|.*/tag/v?([0-9]+\.[0-9]+\.[0-9]+)$|\1|p' \
+                || true
+        )"
+    fi
+    if [[ -z "$latest" ]]; then
+        latest="$(fetch_stdout "$(append_cache_buster "${RAW_URL}/VERSION")" 2>/dev/null | tr -d '[:space:]' || true)"
+    fi
+    # Only a real version string counts (a redirect to a non-tag page or an error
+    # body used to become the "version" and failed later inside tar).
+    if [[ ! "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+        latest=""
+    fi
+    if [[ -z "$latest" ]]; then
+        err "Could not resolve latest version"
+        exit 1
+    fi
+    VERSION="$latest"
+}
+
+resolve_core_version() {
+    if [[ -z "$CORE_VERSION" ]]; then
+        CORE_VERSION="$VERSION"
+    fi
+}
+
+artifact_name_for_platform() {
+    local version="$1"
+    local platform="$2"
+    printf 'pt-core-%s-%s.tar.gz\n' "$platform" "$version"
+}
+
+wrapper_urls() {
+    # mac-flywheel local patch: main's pt wrapper ("${RAW_URL}/pt") is no longer a last fallback.
+    printf '%s\n' \
+        "${RELEASES_URL}/download/v${VERSION}/pt" \
+        "https://raw.githubusercontent.com/${GITHUB_REPO}/v${VERSION}/pt"
+}
+
+core_urls() {
+    local artifact
+    artifact="$(artifact_name_for_platform "$CORE_VERSION" "$PLATFORM")"
+    printf '%s\n' \
+        "${RELEASES_URL}/download/v${CORE_VERSION}/${artifact}"
+    if [[ "$PLATFORM" == linux-x86_64 ]]; then
+        printf '%s\n' "${RELEASES_URL}/download/v${CORE_VERSION}/pt-core-linux-x86_64-musl-${CORE_VERSION}.tar.gz"
+    elif [[ "$PLATFORM" == linux-aarch64 ]]; then
+        printf '%s\n' "${RELEASES_URL}/download/v${CORE_VERSION}/pt-core-linux-aarch64-musl-${CORE_VERSION}.tar.gz"
+    fi
+}
+
+download_first_available() {
+    local output="$1"
+    shift
+    local url
+    for url in "$@"; do
+        [[ -z "$url" ]] && continue
+        if download "$url" "$output" 2>/dev/null; then
+            DOWNLOADED_ARTIFACT="$(basename "$url")"
+            return 0
+        fi
+    done
+    return 1
+}
+
+check_disk_space() {
+    local install_parent
+    install_parent="$(dirname "$DEST")"
+    mkdir -p "$install_parent"
+    local available
+    available=$(df -Pk "$install_parent" | awk 'NR==2 {print $4}')
+    if [[ -n "$available" && "$available" -lt 10240 ]]; then
+        err "At least 10MB of free space is required in $install_parent"
+        exit 1
+    fi
+}
+
+check_write_permissions() {
+    local install_parent
+    install_parent="$(dirname "$DEST")"
+    mkdir -p "$install_parent"
+    if [[ ! -w "$install_parent" ]] && [[ "$SYSTEM" -eq 0 ]]; then
+        err "Install directory is not writable: $install_parent"
+        exit 1
+    fi
+}
+
+check_network() {
+    if [[ -n "$OFFLINE_BUNDLE" || "$FROM_SOURCE" -eq 1 ]]; then
+        info "Skipping network preflight"
+        return 0
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        warn "curl not found; skipping network preflight"
+        return 0
+    fi
+    local url
+    url="${RELEASES_URL}/download/v${VERSION}/pt"
+    if ! curl -fsSL ${PROXY_ARGS[@]+"${PROXY_ARGS[@]}"} --connect-timeout 3 --max-time 5 -o /dev/null "$url"; then
+        warn "Network preflight failed for $url"
+    fi
+}
+
+get_installed_version() {
+    local bin="$1"
+    [[ -x "$bin" ]] || return 0
+    "$bin" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true
+}
+
+check_existing_install() {
+    INSTALLED_WRAPPER_VERSION="$(get_installed_version "$DEST/pt")"
+    INSTALLED_CORE_VERSION="$(get_installed_version "$DEST/pt-core")"
+    if [[ -n "$INSTALLED_WRAPPER_VERSION" ]]; then
+        info "Existing pt version: ${INSTALLED_WRAPPER_VERSION}"
+    fi
+    if [[ -n "$INSTALLED_CORE_VERSION" ]]; then
+        info "Existing pt-core version: ${INSTALLED_CORE_VERSION}"
+    fi
+}
+
+preflight_checks() {
+    info "Running preflight checks"
+    check_disk_space
+    check_write_permissions
+    check_existing_install
+    check_network
+}
+
+acquire_lock() {
+    if mkdir "$LOCK_ROOT" 2>/dev/null; then
+        LOCK_HELD=1
+        printf '%s\n' "$$" > "${LOCK_ROOT}/pid"
+        return 0
+    fi
+
+    if [[ -f "${LOCK_ROOT}/pid" ]]; then
+        local existing_pid
+        existing_pid="$(cat "${LOCK_ROOT}/pid" 2>/dev/null || true)"
+        if [[ -n "$existing_pid" ]] && ! kill -0 "$existing_pid" 2>/dev/null; then
+            rm -rf "$LOCK_ROOT"
+            if mkdir "$LOCK_ROOT" 2>/dev/null; then
+                LOCK_HELD=1
+                printf '%s\n' "$$" > "${LOCK_ROOT}/pid"
+                return 0
+            fi
+            # Another process grabbed the lock between rm and mkdir
+        fi
+    fi
+
+    err "Another pt installer appears to be running (${LOCK_ROOT})"
+    exit 1
+}
+
+sha256_file() {
+    local file="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" | cut -d' ' -f1
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$file" | awk '{print $NF}'
+    else
+        return 1
+    fi
+}
+
+sha256_stdin() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 | cut -d' ' -f1
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 | awk '{print $NF}'
+    else
+        return 1
+    fi
+}
+
+normalize_fingerprint() {
+    local value="$1"
+    value="${value//[[:space:]]/}"
+    value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+    [[ "$value" =~ ^[a-f0-9]{64}$ ]] || return 1
+    printf '%s\n' "$value"
+}
+
+# Print the accepted release-key fingerprints, one per line. An explicit
+# PT_RELEASE_PUBLIC_KEY_FINGERPRINT(_FILE) replaces the built-in list (that is
+# how `pt update` hands over the wrapper's pins, and how a fork pins its own
+# key). Fails if any entry is not a SHA-256 hex digest, so a typo can never
+# turn into "no pin".
+resolve_expected_key_fingerprints() {
+    local origin="built-in pin list"
+    local raw="$TRUSTED_RELEASE_KEY_FINGERPRINTS"
+    if [[ -n "${PT_RELEASE_PUBLIC_KEY_FINGERPRINT:-}" ]]; then
+        origin="PT_RELEASE_PUBLIC_KEY_FINGERPRINT"
+        raw="$PT_RELEASE_PUBLIC_KEY_FINGERPRINT"
+    elif [[ -n "${PT_RELEASE_PUBLIC_KEY_FINGERPRINT_FILE:-}" ]]; then
+        origin="PT_RELEASE_PUBLIC_KEY_FINGERPRINT_FILE"
+        if [[ ! -f "${PT_RELEASE_PUBLIC_KEY_FINGERPRINT_FILE}" ]]; then
+            err "Fingerprint file not found: ${PT_RELEASE_PUBLIC_KEY_FINGERPRINT_FILE}"
+            return 1
+        fi
+        raw="$(awk '$1 !~ /^#/ { print $1 }' "${PT_RELEASE_PUBLIC_KEY_FINGERPRINT_FILE}")"
+    fi
+
+    local -a entries=()
+    local entry normalized
+    IFS=$', \t\n' read -r -d '' -a entries <<<"$raw" || true
+    if [[ "${#entries[@]}" -eq 0 ]]; then
+        err "No release key fingerprints in ${origin}"
+        return 1
+    fi
+    for entry in ${entries[@]+"${entries[@]}"}; do
+        normalized="$(normalize_fingerprint "$entry")" || {
+            err "Invalid release key fingerprint in ${origin}: ${entry}"
+            return 1
+        }
+        printf '%s\n' "$normalized"
+    done
+}
+
+# Fail unless the release public key in $1 is one of the pinned keys.
+check_release_key_pin() {
+    local pubkey_file="$1"
+    local expected actual
+    expected="$(resolve_expected_key_fingerprints)" || return 1
+    actual="$(openssl pkey -pubin -in "$pubkey_file" -outform der 2>/dev/null | sha256_stdin)"
+    actual="$(normalize_fingerprint "$actual")" || {
+        err "Could not compute the release public key fingerprint"
+        return 1
+    }
+    local fp pinned=0
+    while IFS= read -r fp; do
+        [[ "$fp" == "$actual" ]] && pinned=1
+    done <<<"$expected"
+    if [[ "$pinned" -ne 1 ]]; then
+        err "Release public key fingerprint mismatch"
+        err "Release key: ${actual}"
+        err "Trusted:     $(printf '%s' "$expected" | tr '\n' ' ')"
+        err "Refusing a release signed by a key this installer does not pin"
+        return 1
+    fi
+    ok "Release public key fingerprint verified: ${actual:0:16}..."
+}
+
+resolve_release_public_key() {
+    local version="$1"
+    local output="$2"
+
+    if [[ -n "${PT_RELEASE_PUBLIC_KEY_FILE:-}" ]]; then
+        cp "${PT_RELEASE_PUBLIC_KEY_FILE}" "$output"
+    elif [[ -n "${PT_RELEASE_PUBLIC_KEY_PEM:-}" ]]; then
+        printf '%s\n' "${PT_RELEASE_PUBLIC_KEY_PEM}" > "$output"
+    elif ! download "${RELEASES_URL}/download/v${version}/release-signing-public.pem" "$output" 2>/dev/null; then
+        err "Release v${version} does not publish release-signing-public.pem"
+        err "Use PT_RELEASE_PUBLIC_KEY_FILE/PT_RELEASE_PUBLIC_KEY_PEM or install without --verify"
+        return 1
+    fi
+
+    openssl pkey -pubin -in "$output" -noout >/dev/null 2>&1 || {
+        err "Invalid release public key PEM"
+        return 1
+    }
+
+    check_release_key_pin "$output"
+}
+
+download_checksums() {
+    local version="$1"
+    local output="$2"
+    if ! download "${RELEASES_URL}/download/v${version}/checksums.sha256" "$output" 2>/dev/null; then
+        err "Release v${version} does not publish checksums.sha256"
+        err "Install without --verify or provide local verification materials in offline mode"
+        return 1
+    fi
+}
+
+lookup_checksum() {
+    local checksums_file="$1"
+    local filename="$2"
+    grep -E "^[a-f0-9]{64}  ${filename}$" "$checksums_file" | awk '{print $1}'
+}
+
+verify_file_checksum() {
+    local file="$1"
+    local filename="$2"
+    local checksums_file="$3"
+    local expected actual
+
+    expected="$(lookup_checksum "$checksums_file" "$filename" || true)"
+    [[ -n "$expected" ]] || {
+        err "No checksum found for ${filename}"
+        return 1
+    }
+    actual="$(sha256_file "$file")" || {
+        err "Could not compute checksum"
+        return 1
+    }
+    if [[ "$actual" != "$expected" ]]; then
+        err "Checksum mismatch for ${filename}"
+        err "Expected: $expected"
+        err "Actual:   $actual"
+        return 1
+    fi
+    ok "${filename} checksum verified: ${actual:0:16}..."
+}
+
+verify_file_signature() {
+    local file_path="$1"
+    local artifact_name="$2"
+    local version="$3"
+    local pubkey_file="$4"
+    local sig_output="$5"
+
+    if ! download "${RELEASES_URL}/download/v${version}/${artifact_name}.sig" "$sig_output" 2>/dev/null; then
+        err "Release v${version} does not publish ${artifact_name}.sig"
+        err "Install without --verify or publish the matching signature sidecar"
+        return 1
+    fi
+    if openssl dgst -sha256 -verify "$pubkey_file" -signature "$sig_output" "$file_path" >/dev/null 2>&1; then
+        ok "${artifact_name} signature verified"
+        return 0
+    fi
+    err "Signature verification failed for ${artifact_name}"
+    return 1
+}
+
+best_effort_sigstore_verify() {
+    local file_path="$1"
+    local artifact_name="$2"
+    if ! command -v cosign >/dev/null 2>&1; then
+        warn "cosign not found; skipping Sigstore verification for ${artifact_name}"
+        return 0
+    fi
+    warn "No Sigstore bundle published for ${artifact_name}; skipping cosign verification"
+}
+
+install_binary() {
+    local source_file="$1"
+    local dest_dir="$2"
+    local binary_name="$3"
+    local backup_file=""
+    local dest_file="${dest_dir}/${binary_name}"
+    local temp_dest="${dest_file}.new"
+
+    mkdir -p "$dest_dir"
+    if [[ -f "$dest_file" ]]; then
+        backup_file="${dest_file}.bak.$(date +%Y%m%d%H%M%S)"
+        cp "$dest_file" "$backup_file"
+        BACKUP_LINES+=("${binary_name} backup: ${backup_file}")
+    fi
+
+    install -m 0755 "$source_file" "$temp_dest"
+    mv "$temp_dest" "$dest_file"
+    ok "Installed ${dest_file}"
+}
+
+extract_core_archive() {
+    local archive="$1"
+    local extract_dir="$2"
+    mkdir -p "$extract_dir"
+    if [[ ! -s "$archive" ]] || ! tar -tzf "$archive" >/dev/null 2>&1; then
+        err "pt-core archive is empty or corrupt: $(basename "$archive")"
+        err "Nothing was installed. Re-run the installer, or build from source (--from-source)."
+        exit 1
+    fi
+    tar -xzf "$archive" -C "$extract_dir" pt-core 2>/dev/null || tar -xzf "$archive" -C "$extract_dir"
+}
+
+path_line_for_shell() {
+    local install_dir="$1"
+    local shell_name="$2"
+    case "$shell_name" in
+        fish)
+            printf "if not contains \"%s\" \$PATH\n    set -gx PATH \"%s\" \$PATH\nend\n" "$install_dir" "$install_dir"
+            ;;
+        *)
+            printf "case \":\$PATH:\" in\n  *:\"%s\":*) ;;\n  *) export PATH=\"%s:\$PATH\" ;;\nesac\n" "$install_dir" "$install_dir"
+            ;;
+    esac
+}
+
+append_path_snippet() {
+    local file="$1"
+    local shell_name="$2"
+    local install_dir="$3"
+    local marker="# process_triage installer PATH"
+
+    [[ -f "$file" ]] || : > "$file"
+    if grep -Fq "$marker" "$file" 2>/dev/null; then
+        return 0
+    fi
+
+    {
+        printf '\n%s\n' "$marker"
+        path_line_for_shell "$install_dir" "$shell_name"
+    } >> "$file"
+}
+
+maybe_add_path() {
+    local install_dir="$1"
+
+    if [[ "${PT_NO_PATH:-0}" == "1" ]]; then
+        info "Skipping PATH changes (PT_NO_PATH=1)"
+        return 0
+    fi
+
+    if [[ ":$PATH:" == *":${install_dir}:"* ]]; then
+        info "${install_dir} already in PATH"
+        return 0
+    fi
+
+    if [[ "$EASY_MODE" -eq 1 ]]; then
+        append_path_snippet "$HOME/.zshenv" "zsh" "$install_dir"
+        append_path_snippet "$HOME/.profile" "sh" "$install_dir"
+        append_path_snippet "$HOME/.bashrc" "bash" "$install_dir"
+        ok "Added ${install_dir} to shell PATH config"
+    else
+        warn "Add ${install_dir} to PATH to use pt"
+        warn "Hint: run with --easy-mode to update your shell rc files"
+    fi
+}
+
+install_completions_for_shell() {
+    local shell_name="$1"
+    local target=""
+    case "$shell_name" in
+        bash)
+            target="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/pt"
+            ;;
+        zsh)
+            target="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions/_pt"
+            ;;
+        fish)
+            target="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions/pt.fish"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+    mkdir -p "$(dirname "$target")"
+    "$DEST/pt" completions "$shell_name" > "$target"
+    ok "Installed ${shell_name} completions"
+}
+
+maybe_install_completions() {
+    [[ -x "$DEST/pt" ]] || return 0
+    install_completions_for_shell "bash" || true
+    install_completions_for_shell "zsh" || true
+    install_completions_for_shell "fish" || true
+}
+
+agent_present() {
+    local agent="$1"
+    case "$agent" in
+        claude)
+            [[ -d "$HOME/.claude" ]] || command -v claude >/dev/null 2>&1
+            ;;
+        codex)
+            [[ -d "$HOME/.codex" ]] || command -v codex >/dev/null 2>&1
+            ;;
+        copilot)
+            command -v copilot >/dev/null 2>&1
+            ;;
+        cursor)
+            [[ -d "$HOME/.cursor" ]] || [[ -d "$HOME/.config/Cursor" ]] || [[ -d "$HOME/Library/Application Support/Cursor" ]]
+            ;;
+        windsurf)
+            [[ -d "$HOME/.codeium/windsurf" ]] || [[ -d "$HOME/.config/Windsurf" ]]
+            ;;
+        gemini)
+            [[ -d "$HOME/.gemini" ]] || command -v gemini >/dev/null 2>&1
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+run_agent_init_for() {
+    local agent="$1"
+    local status_var="$2"
+    if ! agent_present "$agent"; then
+        printf -v "$status_var" '%s' "skipped"
+        return 0
+    fi
+    if "$DEST/pt-core" agent init --yes --agent "$agent" --format summary >/dev/null 2>&1; then
+        printf -v "$status_var" '%s' "configured"
+    else
+        printf -v "$status_var" '%s' "failed"
+    fi
+}
+
+skill_payload() {
+    cat <<'EOF'
+---
+name: process-triage
+description: >-
+  Triage system processes with the `pt` wrapper and choose safe remediation.
+  Use when diagnosing runaway processes, comparing `pt scan` and `pt deep-scan`,
+  or using `pt agent` plan/apply workflows.
+---
+
+# process-triage
+
+Use `pt` as the user-facing command and `pt help` for wrapper-aware help.
+
+Core workflows (write JSON to a file, then read the file):
+- `pt scan --format json > pt-scan.json`
+- `pt deep-scan --format json > pt-deep-scan.json`
+- `pt agent plan`
+- `pt agent explain`
+- `pt agent apply`
+
+Output handling:
+- Do not truncate `pt` output with `head`, `tail`, or a similar cutoff
+  consumer: a partial JSON document is unparseable, and `pt-core` 2.1.0 and
+  earlier abort with SIGABRT when stdout closes mid-write.
+- Agent harnesses already truncate tool logs, so redirect to a file and
+  query it (for example with `jq`) instead of paging the stream.
+
+Safety:
+- Never kill automatically without explicit user approval
+- Prefer `pt agent` over legacy `pt robot`
+- Use structured output for agent automation
+EOF
+}
+
+install_skill_dir() {
+    local base_dir="$1"
+    local status_var="$2"
+    local skill_dir="${base_dir}/process-triage"
+
+    mkdir -p "$skill_dir"
+    skill_payload > "${skill_dir}/SKILL.md"
+    printf -v "$status_var" '%s' "inline"
+}
+
+maybe_configure_agents() {
+    if [[ "$NO_CONFIGURE" -eq 1 || ! -x "$DEST/pt-core" ]]; then
+        return 0
+    fi
+
+    run_agent_init_for "claude" CLAUDE_STATUS
+    run_agent_init_for "codex" CODEX_STATUS
+    run_agent_init_for "copilot" COPILOT_STATUS
+    run_agent_init_for "cursor" CURSOR_STATUS
+    run_agent_init_for "windsurf" WINDSURF_STATUS
+    if agent_present "gemini"; then
+        GEMINI_STATUS="detected; no automatic setup"
+    fi
+
+    if [[ -d "$HOME/.claude" || "$CLAUDE_STATUS" == "configured" ]]; then
+        install_skill_dir "$HOME/.claude/skills" CLAUDE_SKILL_STATUS
+    fi
+    if [[ -d "$HOME/.codex" || "$CODEX_STATUS" == "configured" ]]; then
+        install_skill_dir "$HOME/.codex/skills" CODEX_SKILL_STATUS
+    fi
+}
+
+maybe_build_from_source() {
+    local source_dir="${TEMP_DIR}/src"
+    local git_ref="v${VERSION}"
+    local wrapper_path="${TEMP_DIR}/pt"
+    local core_path="${TEMP_DIR}/pt-core"
+
+    command -v git >/dev/null 2>&1 || {
+        err "git is required for --from-source"
+        exit 1
+    }
+    command -v cargo >/dev/null 2>&1 || {
+        err "cargo is required for --from-source"
+        exit 1
+    }
+
+    run_with_spinner "Cloning source" git clone --depth 1 --branch "$git_ref" "https://github.com/${GITHUB_REPO}.git" "$source_dir"
+    run_with_spinner "Building pt-core from source" bash -lc "cd '$source_dir' && cargo build --release -p pt-core"
+
+    cp "${source_dir}/pt" "$wrapper_path"
+    cp "${source_dir}/target/release/pt-core" "$core_path"
+}
+
+verify_existing_install_short_circuit() {
+    if [[ "$FORCE_INSTALL" -eq 1 ]]; then
+        return 1
+    fi
+    if [[ "${INSTALLED_WRAPPER_VERSION:-}" == "$VERSION" && "${INSTALLED_CORE_VERSION:-}" == "$CORE_VERSION" ]]; then
+        ok "pt ${VERSION} is already installed"
+        maybe_add_path "$DEST"
+        maybe_install_completions
+        maybe_configure_agents
+        if [[ "$VERIFY_SELF" -eq 1 ]]; then
+            "$DEST/pt" --version >/dev/null
+            "$DEST/pt" scan --format json >/dev/null 2>/dev/null || true
+        fi
+        show_final_summary
+        exit 0
+    fi
+    return 1
+}
+
+prepare_release_verification() {
+    local version="$1"
+    local pubkey_file="$2"
+    local checksums_file="$3"
+
+    resolve_release_public_key "$version" "$pubkey_file"
+    download_checksums "$version" "$checksums_file"
+}
+
+prepare_offline_verification() {
+    local wrapper_source="$1"
+    local core_bundle="$2"
+    local wrapper_sig_output="$3"
+    local core_sig_output="$4"
+    local wrapper_name
+    local core_name
+    local script_dir
+    script_dir="$(dirname "$0")"
+    wrapper_name="$(basename "$wrapper_source")"
+    core_name="$(basename "$core_bundle")"
+
+    prepare_offline_release_public_key "$wrapper_pubkey"
+    cp "$wrapper_pubkey" "$core_pubkey"
+    prepare_offline_checksums "$wrapper_checksums"
+    cp "$wrapper_checksums" "$core_checksums"
+
+    verify_file_signature_offline \
+        "$wrapper_source" \
+        "$wrapper_name" \
+        "$wrapper_pubkey" \
+        "$wrapper_sig_output" \
+        "./${wrapper_name}.sig" \
+        "${script_dir}/${wrapper_name}.sig" \
+        "$(dirname "$wrapper_source")/${wrapper_name}.sig"
+
+    verify_file_signature_offline \
+        "$core_bundle" \
+        "$core_name" \
+        "$core_pubkey" \
+        "$core_sig_output" \
+        "${core_bundle}.sig" \
+        "$(dirname "$core_bundle")/${core_name}.sig"
+}
+
+download_wrapper() {
+    local output="$1"
+    local urls=() url
+    # Not mapfile: it is bash 4+, and stock macOS runs this under /bin/bash 3.2.
+    while IFS= read -r url; do urls+=("$url"); done < <(wrapper_urls)
+    download_first_available "$output" ${urls[@]+"${urls[@]}"} || {
+        err "Failed to download pt wrapper"
+        exit 1
+    }
+}
+
+download_core_archive() {
+    local output="$1"
+    local urls=() url
+    # Not mapfile: it is bash 4+, and stock macOS runs this under /bin/bash 3.2.
+    while IFS= read -r url; do urls+=("$url"); done < <(core_urls)
+    download_first_available "$output" ${urls[@]+"${urls[@]}"} || return 1
+    return 0
+}
+
+show_agent_scan_notice() {
+    [[ "$NO_CONFIGURE" -eq 1 || "$QUIET" -eq 1 ]] && return 0
+    if [[ "$HAS_GUM" -eq 1 ]]; then
+        gum style \
+            --border normal \
+            --border-foreground 244 \
+            --padding "0 1" \
+            "$(gum style --foreground 212 --bold 'Agent scan')" \
+            "$(gum style --foreground 247 'Looking for installed coding agents and optional skills')"
+    else
+        draw_box "0;36" \
+            "Agent scan" \
+            "Looking for installed coding agents and optional skills"
+    fi
+}
+
+show_final_summary() {
+    local dest_display
+    dest_display="$(status_path "$DEST")"
+
+    local lines=(
+        "Installed pt ${VERSION} to ${dest_display}"
+        "Installed pt-core ${CORE_VERSION} to ${dest_display}"
+    )
+
+    AGENT_LINES=()
+    [[ "$CLAUDE_STATUS" != "skipped" ]] && AGENT_LINES+=("Claude Code: ${CLAUDE_STATUS}")
+    [[ "$CODEX_STATUS" != "skipped" ]] && AGENT_LINES+=("Codex CLI: ${CODEX_STATUS}")
+    [[ "$COPILOT_STATUS" != "skipped" ]] && AGENT_LINES+=("GitHub Copilot CLI: ${COPILOT_STATUS}")
+    [[ "$CURSOR_STATUS" != "skipped" ]] && AGENT_LINES+=("Cursor: ${CURSOR_STATUS}")
+    [[ "$WINDSURF_STATUS" != "skipped" ]] && AGENT_LINES+=("Windsurf: ${WINDSURF_STATUS}")
+    [[ "$GEMINI_STATUS" != "skipped" ]] && AGENT_LINES+=("Gemini CLI: ${GEMINI_STATUS}")
+    [[ "$CLAUDE_SKILL_STATUS" != "skipped" ]] && AGENT_LINES+=("Claude skill: ${CLAUDE_SKILL_STATUS}")
+    [[ "$CODEX_SKILL_STATUS" != "skipped" ]] && AGENT_LINES+=("Codex skill: ${CODEX_SKILL_STATUS}")
+
+    lines+=(${AGENT_LINES[@]+"${AGENT_LINES[@]}"})
+    lines+=(${BACKUP_LINES[@]+"${BACKUP_LINES[@]}"})
+    lines+=("Run: pt --help")
+    lines+=("Managed paths:")
+    lines+=("  wrapper: $(status_path "${DEST}/pt")")
+    lines+=("  core:    $(status_path "${DEST}/pt-core")")
+    lines+=("  PATH marker: # process_triage installer PATH")
+
+    echo ""
+    if [[ "$HAS_GUM" -eq 1 && "$QUIET" -eq 0 ]]; then
+        gum style --border double --border-foreground 42 --padding "1 2" ${lines[@]+"${lines[@]}"}
+    else
+        draw_box "0;32" ${lines[@]+"${lines[@]}"}
+    fi
+}
+
+main() {
+    parse_args "$@"
+    # mac-flywheel local patch: only a fixed release is installed.
+    case "$VERSION" in
+        ""|latest) printf 'Refusing pt version %s: this installer only installs a fixed release (default 2.3.0)\n' "'${VERSION:-<empty>}'" >&2; exit 1;;
+    esac
+    if [[ "$EMIT_SKILL_PAYLOAD" -eq 1 ]]; then
+        skill_payload
+        return 0
+    fi
+    setup_proxy
+    detect_gum
+    maybe_self_refresh "$@"
+    show_header
+
+    if [[ "$SYSTEM" -eq 1 ]]; then
+        DEST="/usr/local/bin"
+    fi
+
+    detect_platform
+    resolve_version
+    resolve_core_version
+    create_temp_dir
+    preflight_checks
+    if verify_existing_install_short_circuit; then
+        return 0
+    fi
+    acquire_lock
+
+    local wrapper_file="${TEMP_DIR}/pt"
+    local core_archive="${TEMP_DIR}/pt-core.tar.gz"
+    local core_extract_dir="${TEMP_DIR}/core"
+    local core_binary="${TEMP_DIR}/core/pt-core"
+    local wrapper_checksums="${TEMP_DIR}/wrapper-checksums.sha256"
+    local core_checksums="${TEMP_DIR}/core-checksums.sha256"
+    local wrapper_pubkey="${TEMP_DIR}/wrapper-release.pem"
+    local core_pubkey="${TEMP_DIR}/core-release.pem"
+    local wrapper_source=""
+
+    if [[ "$VERIFY" -eq 1 && -z "$OFFLINE_BUNDLE" ]]; then
+        prepare_release_verification "$VERSION" "$wrapper_pubkey" "$wrapper_checksums"
+        if [[ "$CORE_VERSION" == "$VERSION" ]]; then
+            cp "$wrapper_pubkey" "$core_pubkey"
+            cp "$wrapper_checksums" "$core_checksums"
+        else
+            prepare_release_verification "$CORE_VERSION" "$core_pubkey" "$core_checksums"
+        fi
+    fi
+
+    if [[ -n "$OFFLINE_BUNDLE" ]]; then
+        if [[ ! -f "$OFFLINE_BUNDLE" ]]; then
+            err "Offline bundle not found: $OFFLINE_BUNDLE"
+            exit 1
+        fi
+        cp "$OFFLINE_BUNDLE" "$core_archive"
+        if [[ -f "./pt" ]]; then
+            wrapper_source="./pt"
+            cp ./pt "$wrapper_file"
+        elif [[ -f "$(dirname "$0")/pt" ]]; then
+            wrapper_source="$(dirname "$0")/pt"
+            cp "$(dirname "$0")/pt" "$wrapper_file"
+        else
+            err "Offline mode requires a local pt wrapper beside install.sh or in the current directory"
+            exit 1
+        fi
+    elif [[ "$FROM_SOURCE" -eq 1 ]]; then
+        maybe_build_from_source
+    else
+        run_with_spinner "Downloading pt wrapper" download_wrapper "$wrapper_file"
+        if ! run_with_spinner "Downloading pt-core archive" download_core_archive "$core_archive"; then
+            # mac-flywheel local patch: no automatic source build.
+            err "Prebuilt pt-core ${CORE_VERSION} download failed; refusing to build from source"
+            exit 1
+        fi
+    fi
+
+    if [[ "$FROM_SOURCE" -ne 1 && "$VERIFY" -eq 1 ]]; then
+        if [[ -n "$OFFLINE_BUNDLE" ]]; then
+            prepare_offline_verification "$wrapper_source" "$OFFLINE_BUNDLE" "${TEMP_DIR}/pt.sig" "${TEMP_DIR}/$(basename "$OFFLINE_BUNDLE").sig"
+            verify_file_checksum "$wrapper_file" "pt" "$wrapper_checksums"
+            verify_file_checksum "$core_archive" "$(basename "$OFFLINE_BUNDLE")" "$core_checksums"
+        else
+            verify_file_signature "$wrapper_file" "pt" "$VERSION" "$wrapper_pubkey" "${TEMP_DIR}/pt.sig"
+            verify_file_checksum "$wrapper_file" "pt" "$wrapper_checksums"
+            best_effort_sigstore_verify "$wrapper_file" "pt"
+
+            verify_file_signature "$core_archive" "$DOWNLOADED_ARTIFACT" "$CORE_VERSION" "$core_pubkey" "${TEMP_DIR}/${DOWNLOADED_ARTIFACT}.sig"
+            verify_file_checksum "$core_archive" "$DOWNLOADED_ARTIFACT" "$core_checksums"
+            best_effort_sigstore_verify "$core_archive" "$DOWNLOADED_ARTIFACT"
+        fi
+    fi
+
+    if [[ "$FROM_SOURCE" -ne 1 ]]; then
+        extract_core_archive "$core_archive" "$core_extract_dir"
+    fi
+
+    if [[ "$FROM_SOURCE" -eq 1 ]]; then
+        core_binary="${TEMP_DIR}/pt-core"
+    fi
+
+    [[ -f "$wrapper_file" ]] || {
+        err "Wrapper file missing after acquisition"
+        exit 1
+    }
+    [[ -f "$core_binary" ]] || {
+        err "pt-core binary missing after acquisition"
+        exit 1
+    }
+
+    install_binary "$wrapper_file" "$DEST" "pt"
+    install_binary "$core_binary" "$DEST" "pt-core"
+
+    maybe_add_path "$DEST"
+    maybe_install_completions
+    show_agent_scan_notice
+    maybe_configure_agents
+
+    if [[ "$VERIFY_SELF" -eq 1 ]]; then
+        run_with_spinner "Running post-install verification" bash -lc "'$DEST/pt' --version >/dev/null && '$DEST/pt-core' --version >/dev/null && '$DEST/pt' scan --format json >/dev/null 2>/dev/null"
+    fi
+
+    show_final_summary
+}
+
+main "$@"
