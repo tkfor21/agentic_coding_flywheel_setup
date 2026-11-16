@@ -163,8 +163,8 @@ installers:
     sha256: "72f75e165256a7aaf901e2f6a71556fd088ac012c6652a390012d76f08ab0a05"
 
   sbh:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/storage_ballast_helper/d919e4187a826cb1584a6dddef9c28ea97e6d537/scripts/install.sh"
-    sha256: "75730b65737a66f0beb6029ff4d0ede4e6cb9f0794e8c39438c3a7f2d198a854"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/2026cf1f75385c13c94e76cf481b59d41850c56a/vendor/installers/sbh.sh"
+    sha256: "3b23498671e1333268e900d65e5ba9f0e22daf55dd7b99f4930167e10884eb5f"
 
   slb:
     url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/627cb969cc62400c29b134e0d2153c7ad546bde2/vendor/installers/slb.sh"

@@ -608,6 +608,15 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     [[ -z "${ACFS_INSTALLER_PIN_ARGS[dsr]:-}" ]] || fail "dsr must not get a release --version pin"
 }
 
+@test "mac-flywheel: sbh is pinned to the release the last passing e2e installed (v0.7.16)" {
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    # step 5: sbh shipped v0.7.13-v0.7.16 in four days, so an unpinned "latest" made two e2e runs differ.
+    [[ "${ACFS_INSTALLER_PIN_ARGS[sbh]:-}" == $'--version\nv0.7.16' ]] || fail "sbh pin: '${ACFS_INSTALLER_PIN_ARGS[sbh]:-<none>}'"
+    run _mf_args_with_pins sbh
+    assert_success
+    assert_output $'--version\nv0.7.16'
+}
+
 @test "mac-flywheel: acfs_installer_args_with_pins puts pins first and keeps every call-site argument" {
     source "$PROJECT_ROOT/scripts/lib/security.sh"
     ACFS_INSTALLER_PIN_ARGS=( [demo]=$'--version\nv1.2.3' [demo_eq]="--version=v9" )
@@ -723,6 +732,24 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_success
     run grep -F 'releases/latest' "$PROJECT_ROOT/vendor/installers/jfp.sh"
     assert_failure
+}
+
+@test "mac-flywheel: sbh installs a fixed release and never builds from source (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/sbh.sh"
+    run _mf_vendored_entry_ok sbh
+    assert_success
+    # The default is the pinned release, and it agrees with the argument pin table.
+    run grep -Fx 'VERSION="v0.7.16"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[sbh]}" == $'--version\nv0.7.16' ]] || fail "pin table and vendored default disagree"
+    # The original falls back to `cargo install --git` (sbh's main) when no prebuilt asset is found, e.g. after a
+    # rate-limited API call. The copy fails instead, and refuses "latest".
+    run grep -F 'cargo install --git' "$copy"
+    assert_failure
+    run bash "$copy" --version latest --dry-run --quiet
+    assert_failure
+    assert_output --partial "Refusing"
 }
 
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
