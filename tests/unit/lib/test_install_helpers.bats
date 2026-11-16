@@ -727,6 +727,8 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     [[ "${ACFS_INSTALLER_PIN_ARGS[caam]}" == --version=v* ]] || fail "caam must use --version=vX"
     # pcr's --version prints and exits without installing; it must never be pinned that way.
     [[ -z "${ACFS_INSTALLER_PIN_ARGS[pcr]:-}" ]] || fail "pcr must not get argument pins"
+    # dsr installs main by default; its last release is incompatible with the frozen installer (e2e 20261116-005708).
+    [[ -z "${ACFS_INSTALLER_PIN_ARGS[dsr]:-}" ]] || fail "dsr must not get a release --version pin"
 }
 
 @test "mac-flywheel: acfs_installer_args_with_pins puts pins first and keeps every call-site argument" {

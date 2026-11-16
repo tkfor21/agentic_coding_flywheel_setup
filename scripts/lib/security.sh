@@ -966,6 +966,11 @@ declare -gA ACFS_INSTALLER_PIN_ENV=(
 #   pfr: no releases; pinned to the main commit current at that time.
 #   bun: its installer takes the release tag as its first argument.
 #   pcr: deliberately absent; its script embeds its version, and its --version exits without installing.
+#   dsr: deliberately absent. Its installer clones main by default, so a passing run had main's code, not the
+#        last release; `--version v0.2.3` fails ("missing required bootstrap module: platforms.sh", e2e
+#        20261116-005708), and `--version` goes to `git clone --branch`, which can't take a commit. Step 4.
+#   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
+#         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [brenner_bot]=$'--version\nv0.4.1'
     [bun]="bun-v1.4.4"
@@ -974,7 +979,6 @@ declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [cm]=$'--version\nv0.5.1'
     [csctf]=$'--version\nv0.4.6'
     [dcg]=$'--version\nv0.16.0'
-    [dsr]=$'--version\nv0.2.3'
     [ee]=$'--version\nv0.18.0'
     [ms]=$'--version\nv0.3.0'
     [ntm]="--version=v1.38.0"
