@@ -925,6 +925,21 @@ update_pinned_rust_toolchain() {
     printf '%s\n' "$toolchain"
 }
 
+# mac-flywheel local, the `acfs update` twin of install.sh's _acfs_pinned_ast_grep_version (security.sh
+# ACFS_AST_GREP_PINNED_VERSION, loaded on demand). Refuses anything but a plain X.Y.Z.
+update_pinned_ast_grep_version() {
+    local version="${ACFS_AST_GREP_PINNED_VERSION-}"
+    if [[ -z "${ACFS_AST_GREP_PINNED_VERSION+set}" ]] && declare -F update_require_security >/dev/null 2>&1; then
+        update_require_security >/dev/null 2>&1 || true
+        version="${ACFS_AST_GREP_PINNED_VERSION:-}"
+    fi
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Refusing ast-grep version '${version:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release" >&2
+        return 1
+    fi
+    printf '%s\n' "$version"
+}
+
 # The pinned Node is installed. Any other installed Node, such as a newer alpha, doesn't count.
 update_has_nvm_node() {
     update_nvm_node_bin_dir >/dev/null
@@ -8403,8 +8418,8 @@ update_rust() {
     fi
 
     # mac-flywheel local: install and select the pinned toolchain (security.sh ACFS_RUST_PINNED_TOOLCHAIN). Never
-    # `rustup update stable|nightly` (channels move) and never `rustup self update` (rustup stays the version its frozen,
-    # verified installer put there). Other installed toolchains are left alone, but they are no longer the default.
+    # `rustup update stable|nightly` (channels move) and never a rustup self-update, explicit or implied (rustup stays the
+    # version its frozen, verified installer put there). Other installed toolchains are left alone, but they are no longer the default.
     local rust_toolchain=""
     if ! rust_toolchain="$(update_pinned_rust_toolchain)"; then
         log_item "fail" "Rust" "no valid pinned toolchain"
@@ -8414,7 +8429,8 @@ update_rust() {
     # Capture version before update
     capture_version_before "rust"
 
-    run_cmd "Rust $rust_toolchain" update_run_rust_in_target_context "$rustup_bin" toolchain install "$rust_toolchain" || return 1
+    # `toolchain install` self-updates rustup unless told not to.
+    run_cmd "Rust $rust_toolchain" update_run_rust_in_target_context "$rustup_bin" toolchain install --no-self-update "$rust_toolchain" || return 1
     run_cmd "Rust default $rust_toolchain" update_run_rust_in_target_context "$rustup_bin" default "$rust_toolchain" || return 1
 
     # Show version change without double-counting
@@ -8455,10 +8471,21 @@ update_cargo_tools() {
         fi
 
         capture_version_before "$binary_name"
-        
-        # force is required to update existing install with cargo
-        # Use run_cmd to log and handle errors
-        run_cmd "Update $tool" update_run_rust_in_target_context "$cargo_bin" install "$tool" --locked --force
+
+        if [[ "$tool" == "ast-grep" ]]; then
+            # mac-flywheel local: the pinned release only. cargo replaces a different installed version and skips the
+            # same one, so no --force (which would also rebuild it on every update).
+            local ast_grep_version=""
+            if ! ast_grep_version="$(update_pinned_ast_grep_version)"; then
+                log_item "fail" "ast-grep" "no valid pinned version"
+                continue
+            fi
+            run_cmd "Update $tool $ast_grep_version" update_run_rust_in_target_context "$cargo_bin" install "$tool" --version "$ast_grep_version" --locked
+        else
+            # force is required to update existing install with cargo
+            # Use run_cmd to log and handle errors
+            run_cmd "Update $tool" update_run_rust_in_target_context "$cargo_bin" install "$tool" --locked --force
+        fi
 
         if capture_version_after "$binary_name"; then
              update_say "       ${DIM}%s → %s${NC}\n" "${VERSION_BEFORE[$binary_name]}" "${VERSION_AFTER[$binary_name]}"

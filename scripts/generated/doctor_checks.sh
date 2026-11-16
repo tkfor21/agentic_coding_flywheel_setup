@@ -392,7 +392,7 @@ declare -a MANIFEST_CHECKS=(
     "lang.nvm	nvm + latest Node.js	export NVM_DIR=\"\$HOME/.nvm\"\\n[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"\\nnode --version	required	target_user"
     "tools.atuin	Atuin CLI with guarded agent-safe shim	~/.atuin/bin/atuin --version	required	target_user"
     "tools.zoxide	Zoxide (better cd)	command -v zoxide	required	target_user"
-    "tools.ast_grep	ast-grep (used by UBS for syntax-aware scanning)	sg --version	required	target_user"
+    "tools.ast_grep	ast-grep (used by UBS for syntax-aware scanning)	~/.cargo/bin/ast-grep --version | grep -qx 'ast-grep 0\\\\.51\\\\.2'	required	target_user"
     "agents.claude	Claude Code	target_bin=\"\${ACFS_BIN_DIR:-\$HOME/.local/bin}\"\\n\"\$target_bin/claude\" --version || \"\$target_bin/claude\" --help	required	target_user"
     "agents.codex	OpenAI Codex CLI	target_bin=\"\${ACFS_BIN_DIR:-\$HOME/.local/bin}\"\\n\"\$target_bin/codex\" --version || \"\$target_bin/codex\" --help	required	target_user"
     "agents.gemini	Legacy Google Gemini CLI (retired; not installed by default)	target_bin=\"\${ACFS_BIN_DIR:-\$HOME/.local/bin}\"\\n\"\$target_bin/gemini\" --version || \"\$target_bin/gemini\" --help	optional	target_user"

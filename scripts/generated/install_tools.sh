@@ -797,26 +797,26 @@ acfs_generated_install_tools_ast_grep() {
     log_step "Installing tools.ast_grep"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: install: ~/.cargo/bin/cargo install ast-grep --locked (target_user)"
+        log_info "dry-run: install: ~/.cargo/bin/cargo install ast-grep --version 0.51.2 --locked (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_TOOLS_AST_GREP'
-~/.cargo/bin/cargo install ast-grep --locked
+~/.cargo/bin/cargo install ast-grep --version 0.51.2 --locked
 INSTALL_TOOLS_AST_GREP
         then
-            log_error "tools.ast_grep: install command failed: ~/.cargo/bin/cargo install ast-grep --locked"
+            log_error "tools.ast_grep: install command failed: ~/.cargo/bin/cargo install ast-grep --version 0.51.2 --locked"
             return 1
         fi
     fi
 
     # Verify
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: verify: sg --version (target_user)"
+        log_info "dry-run: verify: ~/.cargo/bin/ast-grep --version | grep -qx 'ast-grep 0\\.51\\.2' (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_TOOLS_AST_GREP'
-sg --version
+~/.cargo/bin/ast-grep --version | grep -qx 'ast-grep 0\.51\.2'
 INSTALL_TOOLS_AST_GREP
         then
-            log_error "tools.ast_grep: verify failed: sg --version"
+            log_error "tools.ast_grep: verify failed: ~/.cargo/bin/ast-grep --version | grep -qx 'ast-grep 0\\.51\\.2'"
             return 1
         fi
     fi

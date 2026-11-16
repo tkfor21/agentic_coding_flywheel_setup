@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="d98fe8fa1d17210a8e2f97cda1a8747fdcdb01dd1e306557f63033b2387ca72d"
+ACFS_MANIFEST_SHA256="10c2fead85c6d73f4904aacf554d66c348d65cfdf8f9e62ad6d4f858e45e91ac"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -1320,7 +1320,7 @@ user_login_shell_configured'
 node --version'
   ['tools.atuin.0']='~/.atuin/bin/atuin --version'
   ['tools.zoxide.0']='command -v zoxide'
-  ['tools.ast_grep.0']='sg --version'
+  ['tools.ast_grep.0']='~/.cargo/bin/ast-grep --version | grep -qx '\''ast-grep 0\.51\.2'\'''
   ['agents.claude.0']='target_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"
 "$target_bin/claude" --version || "$target_bin/claude" --help'
   ['agents.codex.0']='target_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"

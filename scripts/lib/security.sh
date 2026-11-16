@@ -740,6 +740,13 @@ ACFS_NODE_PINNED_VERSION="26.13.1"
 # version for the generated installers; keep them equal.
 ACFS_RUST_PINNED_TOOLCHAIN="1.100.0"
 
+# mac-flywheel local: the ONE ast-grep release ACFS builds with cargo into ~/.cargo/bin (Joel, 2026-11-16: 0.51.2, what
+# acfs-local ran; crates.io, rust-version 1.90.0). An unversioned `cargo install ast-grep` builds the newest crate.
+# UBS installs its own digest-pinned ast-grep into ~/.local/bin separately. install.sh (_acfs_pinned_ast_grep_version)
+# and update.sh (update_pinned_ast_grep_version) refuse anything but a plain X.Y.Z. acfs.manifest.yaml (tools.ast_grep)
+# repeats this version for the generated installers; keep them equal.
+ACFS_AST_GREP_PINNED_VERSION="0.51.2"
+
 # mac-flywheel local: per-installer ARGUMENT pins (phase 2 step 3), one argument per line, put BEFORE the call
 # site's own arguments (acfs_installer_args_with_pins), so an installer that stops parsing at a call site's `--`
 # still sees them. Each value is the version the last passing e2e (20261112-154404, pin df91579f) actually

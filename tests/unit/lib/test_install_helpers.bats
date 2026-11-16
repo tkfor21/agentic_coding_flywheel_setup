@@ -874,6 +874,47 @@ _mf_pinned_rust() { sed -n 's/^ACFS_RUST_PINNED_TOOLCHAIN="\(.*\)"$/\1/p' "$PROJ
     assert_success
 }
 
+# mac-flywheel local: ACFS's own ast-grep (cargo, ~/.cargo/bin) is pinned to one exact release (security.sh
+# ACFS_AST_GREP_PINNED_VERSION; Joel, 2026-11-16: 0.51.2). An unversioned `cargo install ast-grep` takes the newest crate.
+_mf_pinned_ast_grep() { sed -n 's/^ACFS_AST_GREP_PINNED_VERSION="\(.*\)"$/\1/p' "$PROJECT_ROOT/scripts/lib/security.sh"; }
+
+@test "mac-flywheel: ast-grep is pinned to one exact release" {
+    run _mf_pinned_ast_grep
+    assert_output "0.51.2"
+}
+
+@test "mac-flywheel: _acfs_pinned_ast_grep_version refuses prereleases, partial versions and names" {
+    log_error() { echo "log_error $*" >&2; }
+    eval "$(sed -n '/^_acfs_pinned_ast_grep_version() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    declare -F _acfs_pinned_ast_grep_version >/dev/null || fail "_acfs_pinned_ast_grep_version not found in install.sh"
+    local bad
+    for bad in "latest" "0.52.0-alpha.1" "0.51" "v0.51.2" "*" ""; do
+        ACFS_AST_GREP_PINNED_VERSION="$bad"
+        run _acfs_pinned_ast_grep_version
+        assert_failure
+        assert_output --partial "Refusing ast-grep version"
+    done
+    ACFS_AST_GREP_PINNED_VERSION="0.51.2"
+    run _acfs_pinned_ast_grep_version
+    assert_success
+    assert_output "0.51.2"
+}
+
+@test "mac-flywheel: install, the manifest and the generated installers install the pinned ast-grep, never the newest" {
+    local pinned f
+    pinned="$(_mf_pinned_ast_grep)"
+    run grep -F 'install ast-grep --version "$ast_grep_version" --locked' "$PROJECT_ROOT/install.sh"
+    assert_success
+    run grep -F "cargo install ast-grep --version $pinned --locked" "$PROJECT_ROOT/acfs.manifest.yaml"
+    assert_success
+    run grep -F "cargo install ast-grep --version $pinned --locked" "$PROJECT_ROOT/scripts/generated/install_tools.sh"
+    assert_success
+    for f in "$PROJECT_ROOT/install.sh" "$PROJECT_ROOT/acfs.manifest.yaml" "$PROJECT_ROOT"/scripts/generated/*.sh; do
+        run grep -E 'install ast-grep --locked' "$f"
+        assert_failure
+    done
+}
+
 @test "mac-flywheel: nvm's installer is pinned at v0.41.0, not the vulnerable v0.40.1" {
     local url sha
     url="$(awk '$0=="  nvm:"{getline; print}' "$PROJECT_ROOT/checksums.yaml")"
