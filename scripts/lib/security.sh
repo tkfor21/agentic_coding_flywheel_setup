@@ -955,6 +955,12 @@ declare -gA ACFS_INSTALLER_PIN_ENV=(
     [giil]="GIIL_VERSION=3.2.1"
 )
 
+# mac-flywheel local: the ONE Node version ACFS installs, an exact stable LTS release. Never "latest" (nvm's `node`
+# alias), and never a prerelease (alpha/beta/rc/nightly): Node's index listed v27.0.0-alpha first from 2026-11-12, and
+# nvm's `node` alias put acfs-local on it. install.sh (_acfs_pinned_node_version) refuses anything but a plain X.Y.Z.
+# acfs.manifest.yaml (lang.nvm, agents.gemini) repeats this version for the generated installers; keep them equal.
+ACFS_NODE_PINNED_VERSION="26.13.1"
+
 # mac-flywheel local: per-installer ARGUMENT pins (phase 2 step 3), one argument per line, put BEFORE the call
 # site's own arguments (acfs_installer_args_with_pins), so an installer that stops parsing at a call site's `--`
 # still sees them. Each value is the version the last passing e2e (20261112-154404, pin df91579f) actually

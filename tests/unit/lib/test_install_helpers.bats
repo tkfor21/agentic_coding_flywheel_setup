@@ -876,6 +876,84 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_failure
 }
 
+# mac-flywheel local: Node is pinned to one exact, stable release (security.sh ACFS_NODE_PINNED_VERSION). Never `nvm install
+# node` ("latest"), never a prerelease: Node's index listed v27.0.0-alpha first from 2026-11-12 and acfs-local ended up on it.
+_mf_pinned_node() { sed -n 's/^ACFS_NODE_PINNED_VERSION="\(.*\)"$/\1/p' "$PROJECT_ROOT/scripts/lib/security.sh"; }
+_mf_load_node_helpers() {
+    log_error() { echo "log_error $*" >&2; }
+    local f
+    for f in _acfs_pinned_node_version _target_has_nvm_node _target_pinned_nvm_node_bin; do
+        eval "$(sed -n "/^${f}() {$/,/^}/p" "$PROJECT_ROOT/install.sh")"
+        declare -F "$f" >/dev/null || fail "$f not found in install.sh"
+    done
+}
+
+@test "mac-flywheel: Node is pinned to one exact, stable release" {
+    run _mf_pinned_node
+    assert_output "26.13.1"
+}
+
+@test "mac-flywheel: _acfs_pinned_node_version refuses prereleases, aliases and partial versions" {
+    _mf_load_node_helpers
+    local bad
+    for bad in "27.0.0-alpha.0.1.0" "26.14.0-rc.1" "27.0.0-nightly20261112" "v26.13.1" "node" "lts/*" "26.13" ""; do
+        ACFS_NODE_PINNED_VERSION="$bad"
+        run _acfs_pinned_node_version
+        assert_failure
+        assert_output --partial "Refusing Node version"
+    done
+    ACFS_NODE_PINNED_VERSION="26.13.1"
+    run _acfs_pinned_node_version
+    assert_success
+    assert_output "26.13.1"
+}
+
+@test "mac-flywheel: the Node helpers see only the pinned version, never a newer alpha" {
+    _mf_load_node_helpers
+    TARGET_HOME="$BATS_TEST_TMPDIR/home"
+    ACFS_NODE_PINNED_VERSION="26.13.1"
+    local alpha="$TARGET_HOME/.nvm/versions/node/v27.0.0-alpha.0.1.0/bin" pinned="$TARGET_HOME/.nvm/versions/node/v26.13.1/bin"
+    mkdir -p "$alpha"
+    printf '#!/bin/sh\necho v27.0.0-alpha.0.1.0\n' > "$alpha/node"; chmod +x "$alpha/node"
+    # Only an alpha installed: no acceptable Node.
+    run _target_has_nvm_node
+    assert_failure
+    run _target_pinned_nvm_node_bin
+    assert_failure
+    # With the pinned version beside the newer alpha: the pinned one, not the alpha.
+    mkdir -p "$pinned"
+    printf '#!/bin/sh\necho v26.13.1\n' > "$pinned/node"; chmod +x "$pinned/node"
+    run _target_has_nvm_node
+    assert_success
+    run _target_pinned_nvm_node_bin
+    assert_success
+    assert_output "$pinned"
+}
+
+@test "mac-flywheel: install and update install the pinned Node, never nvm's 'node' (latest)" {
+    local f
+    for f in "$PROJECT_ROOT/install.sh" "$PROJECT_ROOT/scripts/lib/update.sh"; do
+        run grep -E 'nvm (install|alias default) node' "$f"
+        assert_failure
+    done
+    run grep -F 'nvm install "$1"' "$PROJECT_ROOT/install.sh"
+    assert_success
+    run grep -F 'nvm install "$node_version"' "$PROJECT_ROOT/scripts/lib/update.sh"
+    assert_success
+    run grep -F '_target_latest_nvm_node_bin' "$PROJECT_ROOT/install.sh"
+    assert_failure
+    # The manifest (source of the generated installers) installs the same pinned version, and nothing generated
+    # installs nvm's `node` alias or picks the newest installed Node.
+    local pinned
+    pinned="$(_mf_pinned_node)"
+    run grep -F "nvm install $pinned" "$PROJECT_ROOT/acfs.manifest.yaml"
+    assert_success
+    for f in "$PROJECT_ROOT/acfs.manifest.yaml" "$PROJECT_ROOT"/scripts/generated/*.sh; do
+        run grep -E 'nvm (install|alias default) node|versions/node/\*/bin/node" \| sort -Vr' "$f"
+        assert_failure
+    done
+}
+
 # mac-flywheel local: nvm's installer is pinned at v0.41.0. v0.40.1 carried CVE-2026-10796 (fixed in v0.40.5) and resolves
 # `nvm install node` to Node's v27 alpha now that Node's index lists it first; v0.41.0 skips alphas (guest-verified).
 @test "mac-flywheel: nvm's installer is pinned at v0.41.0, not the vulnerable v0.40.1" {
@@ -1730,7 +1808,9 @@ case "$1" in
         wait "$probe_runner_pid" || result=$?
         ;;
     nvm)
-        for function_name in _target_has_nvm_node _target_latest_nvm_node_bin _ensure_target_nvm_node; do
+        # mac-flywheel: the Node helpers work on the pinned version (security.sh ACFS_NODE_PINNED_VERSION).
+        ACFS_NODE_PINNED_VERSION="$(sed -n 's/^ACFS_NODE_PINNED_VERSION="\(.*\)"$/\1/p' "$ACFS_VERIFY_FIXTURE_SOURCE/scripts/lib/security.sh")"
+        for function_name in _acfs_pinned_node_version _target_has_nvm_node _target_pinned_nvm_node_bin _ensure_target_nvm_node; do
             eval "$(sed -n "/^${function_name}() {$/,/^}/p" "$ACFS_VERIFY_FIXTURE_SOURCE/install.sh")"
         done
         TARGET_HOME="$ACFS_VERIFY_FIXTURE_ROOT/target-home"
@@ -1743,7 +1823,7 @@ case "$1" in
         try_step_optional() {
             touch "$ACFS_VERIFY_FIXTURE_ROOT/node-installer-attempted"
             if [[ "${ACFS_VERIFY_FIXTURE_REPAIR:-false}" == true ]]; then
-                printf '#!/bin/sh\nprintf "v22.0.0\\n"\n' > "$TARGET_HOME/.nvm/versions/node/v22.0.0/bin/node"
+                printf '#!/bin/sh\nprintf "v%s\\n"\n' "$ACFS_NODE_PINNED_VERSION" > "$TARGET_HOME/.nvm/versions/node/v$ACFS_NODE_PINNED_VERSION/bin/node"
             fi
             # nvm can return 11 after a working Node has been installed.
             return 11
@@ -1908,7 +1988,7 @@ EOF
 @test "_ensure_target_nvm_node: repairs a hung Node instead of hanging again during recovery" {
     setup_verification_deadline_fixture
     export ACFS_VERIFY_FIXTURE_REPAIR=true
-    local node_bin="$ACFS_VERIFY_FIXTURE_ROOT/target-home/.nvm/versions/node/v22.0.0/bin"
+    local node_bin="$ACFS_VERIFY_FIXTURE_ROOT/target-home/.nvm/versions/node/v$(_mf_pinned_node)/bin"
     mkdir -p "$node_bin"
     cp "$ACFS_VERIFY_FIXTURE_ROOT/hanging-tool" "$node_bin/node"
 
@@ -1923,7 +2003,7 @@ EOF
 
 @test "_ensure_target_nvm_node: rejects a hung Node left by a failed repair" {
     setup_verification_deadline_fixture
-    local node_bin="$ACFS_VERIFY_FIXTURE_ROOT/target-home/.nvm/versions/node/v22.0.0/bin"
+    local node_bin="$ACFS_VERIFY_FIXTURE_ROOT/target-home/.nvm/versions/node/v$(_mf_pinned_node)/bin"
     mkdir -p "$node_bin"
     cp "$ACFS_VERIFY_FIXTURE_ROOT/hanging-tool" "$node_bin/node"
 

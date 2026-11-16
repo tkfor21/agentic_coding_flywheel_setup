@@ -470,8 +470,11 @@ EOF
     [[ "$output" -ge 8 ]] || fail "expected explicit Supabase temp cleanup before every installer exit"
 }
 
-@test "update_has_nvm_node: requires executable node binary" {
-    local node_bin="$HOME/.nvm/versions/node/v99.0.0/bin"
+# mac-flywheel local: these helpers see only the pinned Node (security.sh ACFS_NODE_PINNED_VERSION), never "the newest
+# installed", which picked v27.0.0-alpha on acfs-local.
+@test "update_has_nvm_node: requires the pinned Node, executable" {
+    export ACFS_NODE_PINNED_VERSION="26.13.1"
+    local node_bin="$HOME/.nvm/versions/node/v26.13.1/bin"
 
     mkdir -p "$node_bin"
     touch "$node_bin/node"
@@ -484,26 +487,40 @@ EOF
     assert_success
 }
 
-@test "update_nvm_node_bin_dir: picks newest executable node binary" {
-    local older_bin="$HOME/.nvm/versions/node/v20.11.1/bin"
-    local newer_bin="$HOME/.nvm/versions/node/v99.0.0/bin"
+@test "update_nvm_node_bin_dir: picks the pinned Node, never a newer (alpha) one" {
+    export ACFS_NODE_PINNED_VERSION="26.13.1"
+    local pinned_bin="$HOME/.nvm/versions/node/v26.13.1/bin"
+    local alpha_bin="$HOME/.nvm/versions/node/v27.0.0-alpha.0.1.0/bin"
 
-    mkdir -p "$older_bin" "$newer_bin"
-    cat > "$older_bin/node" <<'EOF'
-#!/usr/bin/env bash
-echo older node
-EOF
-    chmod +x "$older_bin/node"
-    touch "$newer_bin/node"
+    mkdir -p "$pinned_bin" "$alpha_bin"
+    printf '#!/usr/bin/env bash\necho alpha\n' > "$alpha_bin/node"
+    chmod +x "$alpha_bin/node"
 
+    # Only the alpha is executable: no acceptable Node.
+    touch "$pinned_bin/node"
+    run update_nvm_node_bin_dir
+    assert_failure
+    run update_has_nvm_node
+    assert_failure
+
+    chmod +x "$pinned_bin/node"
     run update_nvm_node_bin_dir
     assert_success
-    assert_output "$older_bin"
+    assert_output "$pinned_bin"
+}
 
-    chmod +x "$newer_bin/node"
-    run update_nvm_node_bin_dir
+@test "update_pinned_node_version: refuses prereleases, aliases and partial versions" {
+    local bad
+    for bad in "27.0.0-alpha.0.1.0" "26.14.0-rc.1" "node" "lts/*" "26.13" "v26.13.1"; do
+        export ACFS_NODE_PINNED_VERSION="$bad"
+        run update_pinned_node_version
+        assert_failure
+        assert_output --partial "Refusing Node version"
+    done
+    export ACFS_NODE_PINNED_VERSION="26.13.1"
+    run update_pinned_node_version
     assert_success
-    assert_output "$newer_bin"
+    assert_output "26.13.1"
 }
 
 @test "update_preferred_user_bin_dir: falls back to target home when HOME differs" {

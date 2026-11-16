@@ -728,17 +728,20 @@ modules:
       run_as: target_user
       # Check nvm exists AND at least one node version is installed
       # Can't use 'command -v node' because nvm.sh isn't sourced in this context
-      command: "test -d ~/.nvm && ls ~/.nvm/versions/node/ 2>/dev/null | grep -q ."
+      # mac-flywheel local: only the pinned Node counts (security.sh ACFS_NODE_PINNED_VERSION, keep equal).
+      command: "test -x ~/.nvm/versions/node/v26.13.1/bin/node"
     verified_installer:
       tool: nvm
       runner: bash
     install:
-      # After nvm is installed, source it and install latest Node.js
+      # mac-flywheel local: install exactly the pinned, stable Node (security.sh ACFS_NODE_PINNED_VERSION, keep
+      # equal), never nvm's `node` alias (latest, which resolved to v27.0.0-alpha), and confirm it is the default.
       - |
         export NVM_DIR="$HOME/.nvm"
         [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-        nvm install node
-        nvm alias default node
+        nvm install 26.13.1
+        nvm alias default 26.13.1
+        [ "$(nvm version default)" = "v26.13.1" ]
     verify:
       - |
         export NVM_DIR="$HOME/.nvm"
@@ -1041,13 +1044,12 @@ modules:
           exit 0
         fi
         find_nvm_node() {
-          local node_path=""
-          while IFS= read -r node_path; do
-            if [[ -x "$node_path" ]]; then
-              printf '%s\n' "$node_path"
-              return 0
-            fi
-          done < <(compgen -G "$HOME/.nvm/versions/node/*/bin/node" | sort -Vr)
+          # mac-flywheel local: the pinned Node only (security.sh ACFS_NODE_PINNED_VERSION), never the newest installed.
+          local node_path="$HOME/.nvm/versions/node/v26.13.1/bin/node"
+          if [[ -x "$node_path" ]]; then
+            printf '%s\n' "$node_path"
+            return 0
+          fi
           return 1
         }
         if ! nvm_node="$(find_nvm_node)"; then
@@ -1067,7 +1069,7 @@ modules:
             exit 0
           fi
           . "$NVM_DIR/nvm.sh"
-          if ! nvm install node || ! nvm alias default node; then
+          if ! nvm install 26.13.1 || ! nvm alias default 26.13.1; then
             echo "agents.gemini: failed to install Node.js via nvm; skipping Gemini patch" >&2
             exit 0
           fi

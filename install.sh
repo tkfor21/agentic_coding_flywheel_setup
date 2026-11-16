@@ -5566,7 +5566,7 @@ acfs_verify_authored_module() {
             acfs_run_verification_command target_user "$executable" version >/dev/null 2>&1
             ;;
         lang.nvm)
-            executable="$(_target_latest_nvm_node_bin 2>/dev/null)" || return 1
+            executable="$(_target_pinned_nvm_node_bin 2>/dev/null)" || return 1
             acfs_run_verification_command target_user "$executable/node" --version >/dev/null 2>&1
             ;;
         network.tailscale)
@@ -8879,50 +8879,53 @@ install_cli_tools_legacy_lazydocker() {
 # ============================================================
 # Phase 5: Language runtimes
 # ============================================================
-_target_has_nvm_node() {
-    local node_path=""
-
-    while IFS= read -r node_path; do
-        [[ -x "$node_path" ]] && return 0
-    done < <(compgen -G "$TARGET_HOME/.nvm/versions/node/*/bin/node")
-    # nvm 0.40+ may live in $HOME/.config/nvm when NVM_DIR was preset in the
-    # login environment (e.g. mise/omarchy dotfiles on Arch-family systems).
-    while IFS= read -r node_path; do
-        [[ -x "$node_path" ]] && return 0
-    done < <(compgen -G "$TARGET_HOME/.config/nvm/versions/node/*/bin/node")
-
-    return 1
+# mac-flywheel local (never proposed upstream): ACFS installs exactly one Node, security.sh ACFS_NODE_PINNED_VERSION.
+# Never "latest" and never a prerelease: nvm's `node` alias put acfs-local on v27.0.0-alpha. Prints the pinned version, or
+# refuses (alpha/beta/rc/nightly, aliases like node or lts/*, partial or v-prefixed versions) with an error.
+_acfs_pinned_node_version() {
+    local version="${ACFS_NODE_PINNED_VERSION:-}"
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Refusing Node version '${version:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release (no alpha, beta, rc, nightly or alias)"
+        return 1
+    fi
+    printf '%s\n' "$version"
 }
 
-_target_latest_nvm_node_bin() {
-    local node_path=""
+# The pinned Node is installed (under ~/.nvm, or ~/.config/nvm when NVM_DIR was preset in the login environment, e.g. by
+# mise/omarchy dotfiles). Any other installed Node, such as a newer alpha, doesn't count.
+_target_has_nvm_node() {
+    _target_pinned_nvm_node_bin >/dev/null
+}
 
-    while IFS= read -r node_path; do
-        if [[ -x "$node_path" ]]; then
-            printf '%s\n' "${node_path%/node}"
+# The bin directory of the pinned Node. Never "the newest installed", which picked v27.0.0-alpha on acfs-local.
+_target_pinned_nvm_node_bin() {
+    local version="" nvm_dir=""
+    version="$(_acfs_pinned_node_version 2>/dev/null)" || return 1
+    for nvm_dir in "$TARGET_HOME/.nvm" "$TARGET_HOME/.config/nvm"; do
+        if [[ -x "$nvm_dir/versions/node/v$version/bin/node" ]]; then
+            printf '%s\n' "$nvm_dir/versions/node/v$version/bin"
             return 0
         fi
-    done < <(compgen -G "$TARGET_HOME/.nvm/versions/node/*/bin/node" | sort -Vr)
-    while IFS= read -r node_path; do
-        if [[ -x "$node_path" ]]; then
-            printf '%s\n' "${node_path%/node}"
-            return 0
-        fi
-    done < <(compgen -G "$TARGET_HOME/.config/nvm/versions/node/*/bin/node" | sort -Vr)
-
+    done
     return 1
 }
 
 _ensure_target_nvm_node() {
+    # mac-flywheel local: exactly the pinned Node (security.sh ACFS_NODE_PINNED_VERSION), refused if it isn't a stable X.Y.Z.
+    local node_version=""
+    node_version="$(_acfs_pinned_node_version)" || return 1
     local existing_node_bin=""
+    # Already done only when the pinned Node works AND is nvm's default: a VM can have it installed beside a newer
+    # alpha that is still the default (acfs-local on 2026-11-16).
     if _target_has_nvm_node \
-        && existing_node_bin="$(_target_latest_nvm_node_bin 2>/dev/null)" \
-        && acfs_run_verification_command target_user "$existing_node_bin/node" --version >/dev/null 2>&1; then
-        log_detail "nvm + Node.js already installed"
+        && existing_node_bin="$(_target_pinned_nvm_node_bin 2>/dev/null)" \
+        && acfs_run_verification_command target_user "$existing_node_bin/node" --version >/dev/null 2>&1 \
+        && [[ "$(cat "${existing_node_bin%/versions/node/*}/alias/default" 2>/dev/null)" =~ ^v?${node_version//./\\.}$ ]]; then
+        log_detail "nvm + Node.js v$node_version already installed (default)"
         return 0
     fi
 
-    log_detail "Installing nvm + latest Node.js for $TARGET_USER"
+    log_detail "Installing nvm + Node.js v$node_version (pinned) for $TARGET_USER"
     try_step "Installing nvm" acfs_run_verified_upstream_script_as_target "nvm" "bash" || return 1
     # nvm refuses to run with an npm prefix configured (exit 11) even when Node
     # itself installed fine (#351): strip the prefix env vars for the nvm call,
@@ -8944,15 +8947,17 @@ _ensure_target_nvm_node() {
             exit 1
         fi
         . "$NVM_DIR/nvm.sh"
-        nvm install node
-        nvm alias default node
-    ' || nvm_rc=$?
+        # mac-flywheel local: the pinned version ($1), never "node" (latest), then confirm it is the default.
+        nvm install "$1"
+        nvm alias default "$1"
+        [[ "$(nvm version default)" == "v$1" ]]
+    ' acfs-node "$node_version" || nvm_rc=$?
 
     if (( nvm_rc != 0 )); then
         # nvm can exit nonzero (notably 11 on npm-prefix detection) after Node
-        # was already installed correctly. Trust a working node binary.
+        # was already installed correctly. Trust a working PINNED node binary only.
         local node_bin_dir=""
-        if node_bin_dir="$(_target_latest_nvm_node_bin 2>/dev/null)" \
+        if node_bin_dir="$(_target_pinned_nvm_node_bin 2>/dev/null)" \
             && acfs_run_verification_command target_user "$node_bin_dir/node" --version >/dev/null 2>&1; then
             log_warn "nvm exited with status $nvm_rc but Node.js at $node_bin_dir/node works; continuing (#351)"
             return 0

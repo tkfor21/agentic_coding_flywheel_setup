@@ -1147,28 +1147,36 @@ update_nvm_dirs() {
     printf '%s\n' "${NVM_DIR:-$HOME/.nvm}" "$HOME/.nvm" "${XDG_CONFIG_HOME:-$HOME/.config}/nvm" | awk '!seen[$0]++'
 }
 
-update_has_nvm_node() {
-    local node_path="" nvm_dir=""
-
-    while IFS= read -r nvm_dir; do
-        while IFS= read -r node_path; do
-            [[ -x "$node_path" ]] && return 0
-        done < <(compgen -G "$nvm_dir/versions/node/*/bin/node")
-    done < <(update_nvm_dirs)
-
-    return 1
+# mac-flywheel local (never proposed upstream), the `acfs update` twin of install.sh's _acfs_pinned_node_version: the one
+# Node version ACFS installs (security.sh ACFS_NODE_PINNED_VERSION, loaded on demand). Refuses anything but a plain stable
+# X.Y.Z: no alpha/beta/rc/nightly, no alias (nvm's `node`, lts/*). nvm's `node` alias put acfs-local on v27.0.0-alpha.
+update_pinned_node_version() {
+    local version="${ACFS_NODE_PINNED_VERSION:-}"
+    if [[ -z "$version" ]] && declare -F update_require_security >/dev/null 2>&1; then
+        update_require_security >/dev/null 2>&1 || true
+        version="${ACFS_NODE_PINNED_VERSION:-}"
+    fi
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Refusing Node version '${version:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release (no alpha, beta, rc, nightly or alias)" >&2
+        return 1
+    fi
+    printf '%s\n' "$version"
 }
 
-update_nvm_node_bin_dir() {
-    local node_path="" nvm_dir=""
+# The pinned Node is installed. Any other installed Node, such as a newer alpha, doesn't count.
+update_has_nvm_node() {
+    update_nvm_node_bin_dir >/dev/null
+}
 
+# The bin directory of the pinned Node, never "the newest installed" (which picked v27.0.0-alpha on acfs-local).
+update_nvm_node_bin_dir() {
+    local version="" nvm_dir=""
+    version="$(update_pinned_node_version 2>/dev/null)" || return 1
     while IFS= read -r nvm_dir; do
-        while IFS= read -r node_path; do
-            if [[ -x "$node_path" ]]; then
-                printf '%s\n' "${node_path%/node}"
-                return 0
-            fi
-        done < <(compgen -G "$nvm_dir/versions/node/*/bin/node" | sort -Vr)
+        if [[ -x "$nvm_dir/versions/node/v$version/bin/node" ]]; then
+            printf '%s\n' "$nvm_dir/versions/node/v$version/bin"
+            return 0
+        fi
     done < <(update_nvm_dirs)
 
     return 1
@@ -1192,10 +1200,14 @@ update_ensure_gemini_patch_node() {
         return 1
     fi
 
+    local node_version=""
+    node_version="$(update_pinned_node_version)" || return 1
     # shellcheck disable=SC1090
     . "$NVM_DIR/nvm.sh"
-    nvm install node
-    nvm alias default node
+    # mac-flywheel local: the pinned version, never nvm's `node` (latest), and confirm it is the default.
+    nvm install "$node_version"
+    nvm alias default "$node_version"
+    [[ "$(nvm version default)" == "v$node_version" ]] || return 1
 
     update_has_nvm_node
 }
