@@ -929,6 +929,26 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: rch installs a fixed release and never falls back to a source build (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/rch.sh"
+    run _mf_vendored_entry_ok rch
+    assert_success
+    # rch takes its version only from $VERSION (it has no --version flag), so the pin is an environment pin.
+    run grep -Fx 'VERSION="${VERSION:-2.1.36}"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ENV[rch]:-}" == "VERSION=2.1.36" ]] || fail "rch env pin: '${ACFS_INSTALLER_PIN_ENV[rch]:-<none>}'"
+    [[ -z "${ACFS_INSTALLER_PIN_ARGS[rch]:-}" ]] || fail "rch has no --version flag; an argument pin would make it exit 1"
+    # Five download/unpack failures fall back to clone_and_build_from_source, whose tag's rust-toolchain.toml pulls
+    # nightly-2026-08-31. The copy's clone_and_build_from_source fails before cloning or touching rustup.
+    run bash -c "$(sed -n '/^clone_and_build_from_source() {$/,/^}/p' "$copy"); die() { echo \"\$*\" >&2; exit 1; }; installer_release_tag() { echo v2.1.36; }; command_exists() { return 0; }; clone_and_build_from_source"
+    assert_failure
+    assert_output --partial "refusing to build from source"
+    VERSION=latest run bash "$copy" --no-gum
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
