@@ -896,6 +896,22 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_success
 }
 
+@test "mac-flywheel: fsfs's installer never builds from source on its own (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/fsfs.sh"
+    run _mf_vendored_entry_ok fsfs
+    assert_success
+    run grep -Fx 'VERSION="v1.12.3"' "$copy"
+    assert_success
+    run sed -n 's/^ACFS_FSFS_PINNED_VERSION="\(.*\)"$/\1/p' "$PROJECT_ROOT/scripts/lib/security.sh"
+    assert_output "v1.12.3"
+    # The original builds from source (clone + Rust nightly, 15-20 minutes) after a failed download, even with
+    # --artifact-url, and when no prebuilt target exists. The copy fails instead.
+    ! grep -F 'FROM_SOURCE=1' "$copy" | grep -v -E '^\s*--from-source\)' | grep -q . || fail "an automatic source build remains: $(grep -n 'FROM_SOURCE=1' "$copy")"
+    run bash "$copy" --version latest --no-gum
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
