@@ -667,7 +667,7 @@ modules:
       - command -v uv >/dev/null 2>&1 && uv --version
 
   - id: lang.rust
-    description: Rust nightly + cargo
+    description: Rust 1.100.0 (pinned stable) + cargo
     category: lang
     phase: 6
     run_as: target_user
@@ -682,11 +682,12 @@ modules:
     verified_installer:
       tool: rust
       runner: sh
-      args: ["--", "-y", "--default-toolchain", "nightly"]
+      # mac-flywheel local: security.sh ACFS_RUST_PINNED_TOOLCHAIN, an exact stable release; keep them equal.
+      args: ["--", "-y", "--default-toolchain", "1.100.0"]
     install: []
     verify:
       - ~/.cargo/bin/cargo --version
-      - ~/.cargo/bin/rustup show | grep -q nightly
+      - ~/.cargo/bin/rustc --version | grep -q '^rustc 1\.100\.0 '
 
   - id: lang.go
     description: Go toolchain

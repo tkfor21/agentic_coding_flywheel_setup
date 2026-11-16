@@ -523,6 +523,59 @@ EOF
     assert_output "26.13.1"
 }
 
+# mac-flywheel local: Rust is pinned to one exact stable release (security.sh ACFS_RUST_PINNED_TOOLCHAIN). `acfs update`
+# installs and selects that toolchain; it never moves a channel (stable, nightly) or rustup itself.
+@test "update_pinned_rust_toolchain: refuses channels, prereleases, dated nightlies and partial versions" {
+    local bad
+    for bad in "nightly" "stable" "beta" "nightly-2026-08-31" "1.101.0-beta.1" "1.100" "v1.100.0" "1.100.0-aarch64-unknown-linux-gnu" ""; do
+        export ACFS_RUST_PINNED_TOOLCHAIN="$bad"
+        run update_pinned_rust_toolchain
+        assert_failure
+        assert_output --partial "Refusing Rust toolchain"
+    done
+    export ACFS_RUST_PINNED_TOOLCHAIN="1.100.0"
+    run update_pinned_rust_toolchain
+    assert_success
+    assert_output "1.100.0"
+}
+
+@test "update_rust: installs and selects the pinned toolchain; never updates a channel or rustup itself" {
+    mkdir -p "$HOME/.cargo/bin"
+    local log_file="$HOME/rustup.log"
+    cat > "$HOME/.cargo/bin/rustup" <<EOF
+#!/bin/bash
+echo "\$@" >> "$log_file"
+EOF
+    chmod +x "$HOME/.cargo/bin/rustup"
+    export PATH="$HOME/.cargo/bin:$PATH"
+    export ACFS_RUST_PINNED_TOOLCHAIN="1.100.0"
+
+    UPDATE_RUNTIME=true
+    run update_rust
+    assert_success
+
+    grep -qx "toolchain install 1.100.0" "$log_file" || fail "no 'toolchain install 1.100.0': $(cat "$log_file")"
+    grep -qx "default 1.100.0" "$log_file" || fail "no 'default 1.100.0': $(cat "$log_file")"
+    ! grep -E "self update|update (stable|nightly)" "$log_file" || fail "a channel or rustup itself was updated"
+}
+
+@test "update_rust: a non-pinned toolchain value fails without touching rustup" {
+    mkdir -p "$HOME/.cargo/bin"
+    local log_file="$HOME/rustup.log"
+    cat > "$HOME/.cargo/bin/rustup" <<EOF
+#!/bin/bash
+echo "\$@" >> "$log_file"
+EOF
+    chmod +x "$HOME/.cargo/bin/rustup"
+    export PATH="$HOME/.cargo/bin:$PATH"
+    export ACFS_RUST_PINNED_TOOLCHAIN="nightly"
+
+    UPDATE_RUNTIME=true
+    run update_rust
+    assert_failure
+    [[ ! -s "$log_file" ]] || fail "rustup was called: $(cat "$log_file")"
+}
+
 @test "update_preferred_user_bin_dir: falls back to target home when HOME differs" {
     local current_home
     local target_home

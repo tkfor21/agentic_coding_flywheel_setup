@@ -576,7 +576,7 @@ INSTALL_LANG_UV
     log_success "lang.uv installed"
 }
 
-# Rust nightly + cargo
+# Rust 1.100.0 (pinned stable) + cargo
 acfs_generated_install_lang_rust() {
     local module_id="lang.rust"
     acfs_require_contract "module:${module_id}" || return 1
@@ -630,7 +630,7 @@ acfs_generated_install_lang_rust() {
                         elif ! "$verified_installer_chmod_bin" 0444 "$verified_installer_file"; then
                             log_error "lang.rust: failed to make verified installer staging file read-only"
                             ACFS_LAST_MODULE_FAILURE_REASON="environment setup"
-                        elif run_as_target_runner 'sh' "$verified_installer_file" '-y' '--default-toolchain' 'nightly'; then
+                        elif run_as_target_runner 'sh' "$verified_installer_file" '-y' '--default-toolchain' '1.100.0'; then
                             install_success=true
                         else
                             log_error "lang.rust: verified installer execution failed"
@@ -685,13 +685,13 @@ INSTALL_LANG_RUST
         fi
     fi
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: verify: ~/.cargo/bin/rustup show | grep -q nightly (target_user)"
+        log_info "dry-run: verify: ~/.cargo/bin/rustc --version | grep -q '^rustc 1\\.100\\.0 ' (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_LANG_RUST'
-~/.cargo/bin/rustup show | grep -q nightly
+~/.cargo/bin/rustc --version | grep -q '^rustc 1\.100\.0 '
 INSTALL_LANG_RUST
         then
-            log_error "lang.rust: verify failed: ~/.cargo/bin/rustup show | grep -q nightly"
+            log_error "lang.rust: verify failed: ~/.cargo/bin/rustc --version | grep -q '^rustc 1\\.100\\.0 '"
             return 1
         fi
     fi

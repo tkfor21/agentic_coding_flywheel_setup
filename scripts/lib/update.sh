@@ -1163,6 +1163,21 @@ update_pinned_node_version() {
     printf '%s\n' "$version"
 }
 
+# mac-flywheel local, the `acfs update` twin of install.sh's _acfs_pinned_rust_toolchain: the one Rust toolchain ACFS
+# installs (security.sh ACFS_RUST_PINNED_TOOLCHAIN, loaded on demand). Refuses anything but a plain stable X.Y.Z.
+update_pinned_rust_toolchain() {
+    local toolchain="${ACFS_RUST_PINNED_TOOLCHAIN-}"
+    if [[ -z "${ACFS_RUST_PINNED_TOOLCHAIN+set}" ]] && declare -F update_require_security >/dev/null 2>&1; then
+        update_require_security >/dev/null 2>&1 || true
+        toolchain="${ACFS_RUST_PINNED_TOOLCHAIN:-}"
+    fi
+    if [[ ! "$toolchain" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Refusing Rust toolchain '${toolchain:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release (no channel, nightly, beta or prerelease)" >&2
+        return 1
+    fi
+    printf '%s\n' "$toolchain"
+}
+
 # The pinned Node is installed. Any other installed Node, such as a newer alpha, doesn't count.
 update_has_nvm_node() {
     update_nvm_node_bin_dir >/dev/null
@@ -9793,21 +9808,22 @@ update_rust() {
         return 0
     fi
 
+    # mac-flywheel local: install and select the pinned toolchain (security.sh ACFS_RUST_PINNED_TOOLCHAIN). Never
+    # `rustup update stable|nightly` (channels move) and never `rustup self update` (rustup stays the version its frozen,
+    # verified installer put there). Other installed toolchains are left alone, but they are no longer the default.
+    local rust_toolchain=""
+    if ! rust_toolchain="$(update_pinned_rust_toolchain)"; then
+        log_item "fail" "Rust" "no valid pinned toolchain"
+        return 1
+    fi
+
     # Capture version before update
     capture_version_before "rust"
 
-    # Update stable toolchain
-    run_cmd "Rust stable" update_run_rust_in_target_context "$rustup_bin" update stable
-
-    # --force also repairs the manifest's required nightly toolchain when a
-    # partial first install left only rustup or stable behind.
-    if [[ "$FORCE_MODE" == "true" ]] \
-        || update_run_rust_in_target_context "$rustup_bin" toolchain list 2>/dev/null | grep "^nightly" >/dev/null; then
-        run_cmd "Rust nightly" update_run_rust_in_target_context "$rustup_bin" update nightly
-    fi
-
-    # Update rustup itself
-    run_cmd "rustup self-update" update_run_rust_in_target_context "$rustup_bin" self update
+    # mac-flywheel local: upstream's --force nightly repair is gone with nightly itself; installing the pinned
+    # toolchain also repairs a partial first install.
+    run_cmd "Rust $rust_toolchain" update_run_rust_in_target_context "$rustup_bin" toolchain install "$rust_toolchain" || return 1
+    run_cmd "Rust default $rust_toolchain" update_run_rust_in_target_context "$rustup_bin" default "$rust_toolchain" || return 1
 
     # Show version change without double-counting
     if capture_version_after "rust"; then
