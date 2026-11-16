@@ -48,7 +48,9 @@ detect_platform() {
 # Get download URL for platform
 get_download_url() {
   local platform="$1"
-  local base_url="https://github.com/Dicklesworthstone/jeffreysprompts.com/releases/latest/download"
+  # mac-flywheel local patch (vendored copy): the pinned release v1.0.3 (the latest at the last passing e2e,
+  # 20261116-024249), not the latest one, here and in the fallback below. The .sha256 follows the same base.
+  local base_url="https://github.com/Dicklesworthstone/jeffreysprompts.com/releases/download/v1.0.3"
 
   if [[ "$platform" == "linux-x64" ]]; then
     echo "${base_url}/jfp-linux-x64"
@@ -141,7 +143,7 @@ install_from_release() {
   local install_path="$2"
   local fallback_url temp_file checksum_url checksum_file expected_hash actual_hash
 
-  fallback_url="https://github.com/Dicklesworthstone/jeffreysprompts.com/releases/latest/download/$(basename "$download_url")"
+  fallback_url="https://github.com/Dicklesworthstone/jeffreysprompts.com/releases/download/v1.0.3/$(basename "$download_url")"
 
   temp_file="$(make_temp_file)"
 
