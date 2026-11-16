@@ -876,6 +876,16 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_failure
 }
 
+# mac-flywheel local: nvm's installer is pinned at v0.41.0. v0.40.1 carried CVE-2026-10796 (fixed in v0.40.5) and resolves
+# `nvm install node` to Node's v27 alpha now that Node's index lists it first; v0.41.0 skips alphas (guest-verified).
+@test "mac-flywheel: nvm's installer is pinned at v0.41.0, not the vulnerable v0.40.1" {
+    local url sha
+    url="$(awk '$0=="  nvm:"{getline; print}' "$PROJECT_ROOT/checksums.yaml")"
+    sha="$(awk '$0=="  nvm:"{getline; getline; print}' "$PROJECT_ROOT/checksums.yaml")"
+    [[ "$url" == *"/nvm-sh/nvm/4e8758a801eea9479b32a904f31093e410ddaba4/install.sh"* ]] || fail "nvm installer not at v0.41.0 (4e8758a8): $url"
+    [[ "$sha" == *"045932fe05f0d4247c946f2ec0ec4026dbfd8ce88a5f67ea28d8ea833227f48b"* ]] || fail "nvm installer hash isn't v0.41.0's: $sha"
+}
+
 @test "mac-flywheel: install and update both apply argument pins" {
     run grep -F 'acfs_installer_args_with_pins "$tool" "$@"' "$PROJECT_ROOT/install.sh"
     assert_success
