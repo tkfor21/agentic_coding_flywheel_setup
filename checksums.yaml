@@ -187,8 +187,8 @@ installers:
     sha256: "4d8fa56e00f16b66feecacbd943773c61d61ab768b13856de350d86fd8740e2f"
 
   xf:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/xf/8c62f7ed92b948ade409eee9db96ccbaf73fc36a/install.sh"
-    sha256: "36aa9c217b341f64379f08a084c3a45c8419565a0292b0780b05c280f01bcd22"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/b1ec907cee0932b821b5ec01ed79fed5edb6d9fa/vendor/installers/xf.sh"
+    sha256: "c5c17d204d858bc7deed6e4230144cade623a1cf7493961f932f60b633ec9b1e"
 
   zoxide:
     url: "https://raw.githubusercontent.com/ajeetdsouza/zoxide/1bb062057bef85aecb44e2e5c2a7983be4ebb710/install.sh"
