@@ -783,6 +783,8 @@ ACFS_AST_GREP_PINNED_VERSION="0.51.2"
 #        (also pt's newest release). Vendored copy too: no self-refresh from main, no main wrapper, no source build.
 #   casr (step 5, 2026-11-16): v0.4.1 (acfs-local runs casr 0.4.1; doctor doesn't report its version; also casr's
 #        newest release). Vendored copy too: no fallback to the latest release's agent skill.
+#   fmd (step 5, 2026-11-16): v0.7.0 (acfs-local runs fmd 0.7.0; doctor doesn't report its version; also fmd's newest
+#        release). Vendored copy too: no releases/latest download aliases, no automatic source build.
 #   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
 #         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
@@ -796,6 +798,7 @@ declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [csctf]=$'--version\nv0.4.6'
     [dcg]=$'--version\nv0.16.0'
     [ee]=$'--version\nv0.18.0'
+    [fmd]=$'--version\nv0.7.0'
     [ms]=$'--version\nv0.3.0'
     [ntm]="--version=v1.38.0"
     [opencode]=$'--version\n1.19.5'

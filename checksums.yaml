@@ -71,8 +71,8 @@ installers:
     sha256: "152dc0d499c0a986aadd5cb4a74ab3bf67e031275f0e57102b4f4b2bc76db7b3"
 
   fmd:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/franken_markdown/5d00a8e950ac965406e59f8cfd0461cf770111cc/install.sh"
-    sha256: "8a1945c3c59cf00b663ea9994d98a3e916e3a08a67ef85c5cbdab4b2678c63ca"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/adbf6dd347c1ce517c4b90f6e84413bad08fcac9/vendor/installers/fmd.sh"
+    sha256: "fcd2dabd46c16baf24a45beb331ebfb27a076a86e0348cae57239a07f0ddcc6c"
 
   fsfs:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/7d899e67f21efa59796ca06ff13a71f9fa932c92/install.sh"

@@ -863,6 +863,24 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: fmd installs a fixed release, never a latest alias or a source build (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/fmd.sh"
+    run _mf_vendored_entry_ok fmd
+    assert_success
+    run grep -Fx 'VERSION="v0.7.0"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[fmd]:-}" == $'--version\nv0.7.0' ]] || fail "fmd pin: '${ACFS_INSTALLER_PIN_ARGS[fmd]:-<none>}'"
+    # Even with --version, the original's download list ends with releases/latest aliases (tier 3), then builds from
+    # source (tier 4), whose tag clone falls back to cloning main. An unknown platform also switches to a source build.
+    ! grep -F 'releases/latest/download/${BINARY_NAME}' "$copy" || fail "a releases/latest download alias remains"
+    ! grep -F 'falling back to build-from-source' "$copy" || fail "the tier 4 source build remains"
+    ! grep -F 'will build from source"; FROM_SOURCE=1' "$copy" || fail "the unknown-platform source build remains"
+    run bash "$copy" --version latest --no-gum
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
