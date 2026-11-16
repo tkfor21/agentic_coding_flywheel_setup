@@ -63,8 +63,8 @@ installers:
     sha256: "abe33abdbd9146e8f93c70d98d43ba16177d1d7ddf7245d9e2b0d5b68946779d"
 
   dsr:
-    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/cc7ef9aa97d77875f736d680d3798d3065618141/vendor/installers/dsr.sh"
-    sha256: "f681338460d139076aaf946f2e6328d062fe4deaab3ba01f977b0d7c5172514a"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/108282b6497388d867b31b80cf972a021bfac47a/vendor/installers/dsr.sh"
+    sha256: "8db4cc2093fd104ce111c0b91dc66794551e6ccd0eb74667ae753d3db5878093"
 
   ee:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/eidetic_engine_cli/620a8558b4d4fdbb46e20d66dd596781881efa16/install.sh"
@@ -99,8 +99,8 @@ installers:
     sha256: "df93f14492621de7663244e89fd6f38343d6b4eb9f32f950ec466075fe438c0e"
 
   mdwb:
-    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/fb6edb5f94b91306cea353bf743af04264629101/vendor/installers/mdwb.sh"
-    sha256: "eec71393d6360eaa0993944a17703184d55afec20e6c8744eb0b412f5399baed"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/108282b6497388d867b31b80cf972a021bfac47a/vendor/installers/mdwb.sh"
+    sha256: "43bef403a23d5a430b72ed990cb9f0126b5e4227581d6c94dde0bce1dbf3e406"
 
   ms:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/30c8fdadccbe759b5642732c28a8e910b9eb9db5/scripts/install.sh"

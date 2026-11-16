@@ -775,6 +775,11 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     run grep -F 'CLONE_REFS+=("main")' "$copy"
     assert_failure
     [[ -z "${ACFS_INSTALLER_PIN_ARGS[dsr]:-}" ]] || fail "dsr must not also get a --version pin"
+    # A tag can be moved, so the clone must also be checked against the exact reviewed commit.
+    run grep -F 'DSR_PINNED_SHA="725df35a88cd1a9df0f95c2922b8a792f0bf4460"' "$copy"
+    assert_success
+    run grep -F 'rev-parse HEAD 2>/dev/null)" = "$DSR_PINNED_SHA"' "$copy"
+    assert_success
 }
 
 # mac-flywheel local, phase 2 step 4: mdwb has no releases; its installer clones the default branch (or pulls main)
@@ -797,6 +802,11 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     run grep -F 'pull --ff-only origin main' "$copy"
     assert_failure
     run grep -E 'command_exists uv' "$copy"
+    assert_success
+    # A tag can be moved, so the checkout must also be checked against the exact reviewed commit.
+    run grep -F 'MDWB_PINNED_SHA="28edccfede2d09b0e94146bc612f7a4dc41792c2"' "$copy"
+    assert_success
+    run grep -F '"$(git rev-parse HEAD)" != "$MDWB_PINNED_SHA"' "$copy"
     assert_success
 }
 
