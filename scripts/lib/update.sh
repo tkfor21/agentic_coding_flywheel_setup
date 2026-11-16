@@ -4869,30 +4869,16 @@ update_is_valid_fsfs_version() {
     [[ "$version" =~ ^v[0-9][A-Za-z0-9._-]*$ ]]
 }
 
+# mac-flywheel local: the pinned version (security.sh ACFS_FSFS_PINNED_VERSION, loaded on demand), or
+# $ACFS_FSFS_VERSION as an operator override. Never releases/latest; with neither, there is no version.
 update_resolve_fsfs_latest_version() {
-    if [[ -n "${ACFS_FSFS_VERSION:-}" ]]; then
-        update_is_valid_fsfs_version "$ACFS_FSFS_VERSION" || return 1
-        printf '%s\n' "$ACFS_FSFS_VERSION"
-        return 0
+    local version="${ACFS_FSFS_VERSION:-}"
+    if [[ -z "$version" && -z "${ACFS_FSFS_PINNED_VERSION+set}" ]] && declare -F update_require_security >/dev/null 2>&1; then
+        update_require_security >/dev/null 2>&1 || true
     fi
-
-    local latest_url="https://api.github.com/repos/Dicklesworthstone/frankensearch/releases/latest"
-    local redirect_url="https://github.com/Dicklesworthstone/frankensearch/releases/latest"
-    local tag=""
-    tag="$(update_curl -H "Accept: application/vnd.github.v3+json" "$latest_url" 2>/dev/null \
-        | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-        | head -n 1 || true)"
-
-    if update_is_valid_fsfs_version "$tag"; then
-        printf '%s\n' "$tag"
-        return 0
-    fi
-
-    tag="$(update_curl -o /dev/null -w '%{url_effective}' "$redirect_url" 2>/dev/null \
-        | sed -E 's|.*/tag/||' || true)"
-
-    update_is_valid_fsfs_version "$tag" || return 1
-    printf '%s\n' "$tag"
+    [[ -n "$version" ]] || version="${ACFS_FSFS_PINNED_VERSION:-}"
+    update_is_valid_fsfs_version "$version" || return 1
+    printf '%s\n' "$version"
 }
 
 update_fetch_fsfs_artifact_checksum() {
@@ -4918,33 +4904,10 @@ update_resolve_fsfs_artifact_contract() {
         return 1
     fi
 
-    if [[ -n "${ACFS_FSFS_VERSION:-}" ]]; then
-        update_is_valid_fsfs_version "$ACFS_FSFS_VERSION" || return 1
-        candidates+=("$ACFS_FSFS_VERSION")
-    else
-        while IFS= read -r candidate; do
-            [[ -n "$candidate" ]] || continue
-            case " ${candidates[*]} " in
-                *" $candidate "*) ;;
-                *) candidates+=("$candidate") ;;
-            esac
-        done < <(
-            update_curl \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/Dicklesworthstone/frankensearch/releases?per_page=10" 2>/dev/null \
-                | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || true
-        )
-
-        candidate="$(update_curl -o /dev/null -w '%{url_effective}' \
-            "https://github.com/Dicklesworthstone/frankensearch/releases/latest" 2>/dev/null \
-            | sed -E 's|.*/tag/||' || true)"
-        if update_is_valid_fsfs_version "$candidate"; then
-            case " ${candidates[*]} " in
-                *" $candidate "*) ;;
-                *) candidates+=("$candidate") ;;
-            esac
-        fi
-    fi
+    # mac-flywheel local: only the pinned version (or the $ACFS_FSFS_VERSION override); no release list, no
+    # releases/latest. Upstream tried the ten newest releases until one had a lite checksum.
+    candidate="$(update_resolve_fsfs_latest_version)" || return 1
+    candidates+=("$candidate")
 
     for fsfs_version in "${candidates[@]}"; do
         update_is_valid_fsfs_version "$fsfs_version" || continue

@@ -759,6 +759,14 @@ ACFS_RUST_PINNED_TOOLCHAIN="1.100.0"
 # repeats this version for the generated installers; keep them equal.
 ACFS_AST_GREP_PINNED_VERSION="0.51.2"
 
+# mac-flywheel local: the ONE FrankenSearch (fsfs) release ACFS installs (step 5, 2026-11-16: acfs-local runs
+# "fsfs 1.12.3 (frankensearch 1.12.3)"; doctor doesn't report fsfs's version; also frankensearch's newest release,
+# 2026-10-05). ACFS resolves fsfs's version itself and passes --version/--artifact-url/--checksum to the installer:
+# scripts/lib/stack.sh (_stack_resolve_fsfs_*), scripts/lib/update.sh (update_resolve_fsfs_*) and the generated
+# install_stack.sh (packages/manifest/src/generate.ts) use $ACFS_FSFS_VERSION, an operator override, or else this pin,
+# and never a release list or releases/latest.
+ACFS_FSFS_PINNED_VERSION="v1.12.3"
+
 # mac-flywheel local: per-installer ARGUMENT pins (phase 2 step 3), one argument per line, put BEFORE the call
 # site's own arguments (acfs_installer_args_with_pins), so an installer that stops parsing at a call site's `--`
 # still sees them. Each value is the version the last passing e2e (20261112-154404, pin df91579f) actually

@@ -3305,24 +3305,11 @@ acfs_generated_install_stack_frankensearch() {
                                 fsfs_can_run=false
                                 log_warn "stack.frankensearch: FrankenSearch Linux binary artifact unavailable for this architecture; skipping source-build fallback"
                             else
-                                if [[ -n "${ACFS_FSFS_VERSION:-}" ]]; then
-                                    fsfs_candidates+=("$ACFS_FSFS_VERSION")
-                                else
-                                    while IFS= read -r fsfs_candidate; do
-                                        [[ -n "$fsfs_candidate" ]] || continue
-                                        case " ${fsfs_candidates[*]} " in
-                                            *" $fsfs_candidate "*) ;;
-                                            *) fsfs_candidates+=("$fsfs_candidate") ;;
-                                        esac
-                                    done < <(acfs_curl --connect-timeout 30 --max-time 60 -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/Dicklesworthstone/frankensearch/releases?per_page=10" 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || true)
-
-                                    fsfs_candidate="$(acfs_curl --connect-timeout 30 --max-time 60 -o /dev/null -w '%{url_effective}' "https://github.com/Dicklesworthstone/frankensearch/releases/latest" 2>/dev/null | sed -E 's|.*/tag/||' || true)"
-                                    if [[ "$fsfs_candidate" =~ ^v[0-9][A-Za-z0-9._-]*$ ]]; then
-                                        case " ${fsfs_candidates[*]} " in
-                                            *" $fsfs_candidate "*) ;;
-                                            *) fsfs_candidates+=("$fsfs_candidate") ;;
-                                        esac
-                                    fi
+                                # mac-flywheel local: only the pinned version (security.sh ACFS_FSFS_PINNED_VERSION) or the
+                                # $ACFS_FSFS_VERSION override; no release list, no releases/latest.
+                                fsfs_candidate="${ACFS_FSFS_VERSION:-${ACFS_FSFS_PINNED_VERSION:-}}"
+                                if [[ "$fsfs_candidate" =~ ^v[0-9][A-Za-z0-9._-]*$ ]]; then
+                                    fsfs_candidates+=("$fsfs_candidate")
                                 fi
 
                                 if [[ ${#fsfs_candidates[@]} -eq 0 ]]; then

@@ -881,6 +881,21 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: FrankenSearch is pinned to v1.12.3 in every resolver, which never look up releases" {
+    # ACFS resolves fsfs's version itself (stack.sh, update.sh, and the generated install_stack.sh) and hands the
+    # installer --version/--artifact-url/--checksum. Upstream picked the newest release with a lite checksum.
+    run sed -n 's/^ACFS_FSFS_PINNED_VERSION="\(.*\)"$/\1/p' "$PROJECT_ROOT/scripts/lib/security.sh"
+    assert_output "v1.12.3"
+    local f
+    for f in "$PROJECT_ROOT/scripts/lib/stack.sh" "$PROJECT_ROOT/scripts/lib/update.sh" \
+        "$PROJECT_ROOT/scripts/generated/install_stack.sh" "$PROJECT_ROOT/packages/manifest/src/generate.ts"; do
+        run grep -E 'frankensearch/releases\?per_page|frankensearch/releases/latest' "$f"
+        assert_failure
+    done
+    run grep -F 'ACFS_FSFS_PINNED_VERSION' "$PROJECT_ROOT/scripts/generated/install_stack.sh"
+    assert_success
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh

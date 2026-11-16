@@ -12499,14 +12499,18 @@ EOF_DCG_CONFIG_TRUSTED_HELPERS
     assert_success
 }
 
-@test "stack FrankenSearch release resolution ignores shell function curl" {
+@test "stack FrankenSearch release resolution uses the pinned version and ignores shell function curl" {
+    # mac-flywheel local: replaces upstream's "newest release with a checksum" resolution. The contract is the pinned
+    # version (security.sh ACFS_FSFS_PINNED_VERSION) or nothing; no release list, no releases/latest.
     local stack_lib="$PROJECT_ROOT/scripts/lib/stack.sh"
     local curl_marker="${BATS_TEST_TMPDIR}/stack-curl-poison.marker"
+    local list_marker="${BATS_TEST_TMPDIR}/stack-release-list.marker"
 
     # shellcheck disable=SC1090
     source "$stack_lib"
 
     unset ACFS_FSFS_VERSION
+    export ACFS_FSFS_PINNED_VERSION="v1.2.4"
     log_detail() { :; }
     curl() {
         : > "$curl_marker"
@@ -12514,21 +12518,14 @@ EOF_DCG_CONFIG_TRUSTED_HELPERS
     }
     _stack_system_curl() {
         case "$*" in
-            *"releases?per_page=10"*)
-                printf '%s\n' \
-                    '    "tag_name": "v1.2.5",' \
-                    '    "tag_name": "v1.2.4",'
-                ;;
-            *"v1.2.5"*.sha256*)
-                return 22
+            *"releases?per_page=10"*|*"releases/latest"*)
+                : > "$list_marker"
+                printf '%s\n' '    "tag_name": "v1.2.5",'
                 ;;
             *"v1.2.4"*.sha256*)
                 printf '%s  %s\n' \
                     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" \
                     "fsfs-lite-1.2.4-x86_64-unknown-linux-musl.tar.xz"
-                ;;
-            *"releases/latest"*)
-                printf '%s\n' "https://github.com/Dicklesworthstone/frankensearch/releases/tag/v1.2.5"
                 ;;
             *)
                 return 1
@@ -12543,6 +12540,15 @@ EOF_DCG_CONFIG_TRUSTED_HELPERS
     assert_output --partial "https://github.com/Dicklesworthstone/frankensearch/releases/download/v1.2.4/fsfs-lite-1.2.4-x86_64-unknown-linux-musl.tar.xz"
     assert_output --partial "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     [[ ! -e "$curl_marker" ]]
+    [[ ! -e "$list_marker" ]] || fail "a release list or releases/latest was fetched"
+
+    # No pin and no override: no contract, rather than the newest release.
+    export ACFS_FSFS_PINNED_VERSION=""
+    run _stack_resolve_fsfs_artifact_contract "x86_64-unknown-linux-musl"
+    assert_failure
+    run _stack_resolve_fsfs_latest_version
+    assert_failure
+    [[ ! -e "$list_marker" ]] || fail "a release list or releases/latest was fetched"
 }
 
 @test "stack Agent Mail wait uses system curl helper" {
@@ -13722,26 +13728,22 @@ EOF
     done
 }
 
-@test "update fsfs artifact contract falls back when latest checksum is not ready" {
+@test "update fsfs artifact contract uses the pinned version, never the release list" {
+    # mac-flywheel local: replaces upstream's "falls back when latest checksum is not ready" (newest-release resolution).
+    local list_marker="${BATS_TEST_TMPDIR}/update-release-list.marker"
     unset ACFS_FSFS_VERSION
+    export ACFS_FSFS_PINNED_VERSION="v1.2.4"
     log_to_file() { :; }
     update_curl() {
         case "$*" in
-            *"releases?per_page=10"*)
-                printf '%s\n' \
-                    '    "tag_name": "v1.2.5",' \
-                    '    "tag_name": "v1.2.4",'
-                ;;
-            *"v1.2.5"*.sha256*)
-                return 22
+            *"releases?per_page=10"*|*"releases/latest"*)
+                : > "$list_marker"
+                printf '%s\n' '    "tag_name": "v1.2.5",'
                 ;;
             *"v1.2.4"*.sha256*)
                 printf '%s  %s\n' \
                     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" \
                     "fsfs-lite-1.2.4-x86_64-unknown-linux-musl.tar.xz"
-                ;;
-            *"releases/latest"*)
-                printf '%s\n' "https://github.com/Dicklesworthstone/frankensearch/releases/tag/v1.2.5"
                 ;;
             *)
                 return 1
@@ -13755,22 +13757,28 @@ EOF
     assert_output --partial "v1.2.4"
     assert_output --partial "https://github.com/Dicklesworthstone/frankensearch/releases/download/v1.2.4/fsfs-lite-1.2.4-x86_64-unknown-linux-musl.tar.xz"
     assert_output --partial "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    [[ ! -e "$list_marker" ]] || fail "a release list or releases/latest was fetched"
 }
 
-@test "update fsfs version resolver falls back to release redirect" {
+@test "update fsfs version resolver returns the pinned version, never releases/latest" {
+    # mac-flywheel local: replaces upstream's "falls back to release redirect".
+    local list_marker="${BATS_TEST_TMPDIR}/update-latest.marker"
     unset ACFS_FSFS_VERSION
+    export ACFS_FSFS_PINNED_VERSION="v1.2.4"
     update_curl() {
-        case "$*" in
-            *api.github.com*) return 22 ;;
-            *releases/latest*) printf '%s\n' "https://github.com/Dicklesworthstone/frankensearch/releases/tag/v1.2.5" ;;
-            *) return 1 ;;
-        esac
+        : > "$list_marker"
+        printf '%s\n' "https://github.com/Dicklesworthstone/frankensearch/releases/tag/v1.2.5"
     }
 
     run update_resolve_fsfs_latest_version
 
     assert_success
-    assert_output "v1.2.5"
+    assert_output "v1.2.4"
+    [[ ! -e "$list_marker" ]] || fail "the network was asked for a version"
+
+    export ACFS_FSFS_PINNED_VERSION=""
+    run update_resolve_fsfs_latest_version
+    assert_failure
 }
 
 @test "update fsfs version resolver rejects malformed override" {
