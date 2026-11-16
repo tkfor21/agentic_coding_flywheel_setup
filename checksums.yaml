@@ -99,8 +99,8 @@ installers:
     sha256: "df93f14492621de7663244e89fd6f38343d6b4eb9f32f950ec466075fe438c0e"
 
   mdwb:
-    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/108282b6497388d867b31b80cf972a021bfac47a/vendor/installers/mdwb.sh"
-    sha256: "43bef403a23d5a430b72ed990cb9f0126b5e4227581d6c94dde0bce1dbf3e406"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/f1e3412631d307aa9c0e0d9e306afec6b21849ad/vendor/installers/mdwb.sh"
+    sha256: "993e0cf6aae4c408e0f81fe7e3c383b68c619340f7a272eff848fcbf3485ce67"
 
   ms:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/30c8fdadccbe759b5642732c28a8e910b9eb9db5/scripts/install.sh"

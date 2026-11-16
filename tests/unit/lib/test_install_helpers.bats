@@ -801,8 +801,12 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     assert_success
     run grep -F 'pull --ff-only origin main' "$copy"
     assert_failure
-    run grep -E 'command_exists uv' "$copy"
-    assert_success
+    # ACFS's clean runner PATH has no ~/.local/bin, so install_uv must look there before deciding uv is missing
+    # (otherwise it installs its 0.13.0 over ACFS's uv; seen in e2e 20261116-014851). The PATH export has to be
+    # the function's first statement, before its `command_exists uv` check.
+    local first_stmt
+    first_stmt="$(sed -n '/^install_uv() {$/,/^}/p' "$copy" | grep -v -E '^\s*#|^install_uv\(\) \{$|^\s*$' | head -1)"
+    [[ "$first_stmt" == *'export PATH="$HOME/.local/bin:'* ]] || fail "install_uv doesn't look in ~/.local/bin first: $first_stmt"
     # A tag can be moved, so the checkout must also be checked against the exact reviewed commit.
     run grep -F 'MDWB_PINNED_SHA="28edccfede2d09b0e94146bc612f7a4dc41792c2"' "$copy"
     assert_success
