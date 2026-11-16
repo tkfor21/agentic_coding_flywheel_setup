@@ -139,8 +139,8 @@ installers:
     sha256: "467001baec1f304511e82e8e9485e292c78f2023645ee367889b6b06fabed8a3"
 
   pt:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/process_triage/558c1018ef9dea0921e327b8d23c32558bac66dd/install.sh"
-    sha256: "bd52767e816c13513d1d8458ca03751265bf84f2d375d1953fa2fc603162bc2a"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/c0ad4dbd4a35563180ec3220652f878ae3b7d4f6/vendor/installers/pt.sh"
+    sha256: "8fac84ba3a4a1f67186ca07b3cc3730d094d3a1e8e7567213c0d751ae2c3baff"
 
   rano:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/rano/aea744c8cb79bca04f9553a126dadde7565bad55/install.sh"
