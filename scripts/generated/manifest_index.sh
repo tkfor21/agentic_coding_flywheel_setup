@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="4dfcde536fea7e9f9ff8c705fdc2798070acc22c20958a20b02aa5b0db79d89e"
+ACFS_MANIFEST_SHA256="48aa453dc0af9560a75359e0bb65947ca4b5129c1fe4d72b233a4ff7ea0db214"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -747,7 +747,7 @@ grep -qE '\''^ClientAliveInterval[[:space:]]+[1-9]'\'' /etc/ssh/sshd_config 2>/d
   ['lang.uv']='test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/uv" || test -x "$HOME/.local/bin/uv"'
   ['lang.rust']='test -x ~/.cargo/bin/cargo'
   ['lang.go']='command -v go'
-  ['lang.nvm']='test -d ~/.nvm && ls ~/.nvm/versions/node/ 2>/dev/null | grep -q .'
+  ['lang.nvm']='test -x ~/.nvm/versions/node/v26.13.1/bin/node'
   ['tools.atuin']='test -x ~/.atuin/bin/atuin && test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin" && grep -Fq "agent hook integration disabled by ACFS" "${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin"'
   ['tools.zoxide']='command -v zoxide'
   ['tools.ast_grep']='command -v sg'

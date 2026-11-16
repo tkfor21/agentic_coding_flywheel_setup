@@ -1116,13 +1116,12 @@ if ! load_checksums; then
   exit 0
 fi
 find_nvm_node() {
-  local node_path=""
-  while IFS= read -r node_path; do
-    if [[ -x "$node_path" ]]; then
-      printf '%s\n' "$node_path"
-      return 0
-    fi
-  done < <(compgen -G "$HOME/.nvm/versions/node/*/bin/node" | sort -Vr)
+  # mac-flywheel local: the pinned Node only (security.sh ACFS_NODE_PINNED_VERSION), never the newest installed.
+  local node_path="$HOME/.nvm/versions/node/v26.13.1/bin/node"
+  if [[ -x "$node_path" ]]; then
+    printf '%s\n' "$node_path"
+    return 0
+  fi
   return 1
 }
 if ! nvm_node="$(find_nvm_node)"; then
@@ -1142,7 +1141,7 @@ if ! nvm_node="$(find_nvm_node)"; then
     exit 0
   fi
   . "$NVM_DIR/nvm.sh"
-  if ! nvm install node || ! nvm alias default node; then
+  if ! nvm install 26.13.1 || ! nvm alias default 26.13.1; then
     echo "agents.gemini: failed to install Node.js via nvm; skipping Gemini patch" >&2
     exit 0
   fi

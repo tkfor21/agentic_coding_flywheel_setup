@@ -850,8 +850,9 @@ acfs_generated_install_lang_nvm() {
         if ! run_as_target_shell <<'INSTALL_LANG_NVM'
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-nvm install node
-nvm alias default node
+nvm install 26.13.1
+nvm alias default 26.13.1
+[ "$(nvm version default)" = "v26.13.1" ]
 INSTALL_LANG_NVM
         then
             log_error "lang.nvm: install command failed: export NVM_DIR=\"\$HOME/.nvm\""
