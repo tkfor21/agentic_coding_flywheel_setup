@@ -814,6 +814,68 @@ _mf_args_with_pins() { # tool args... -> one merged arg per line, empty args sho
     assert_success
 }
 
+# mac-flywheel local, phase 2 step 4 (the rest): bv, slb and jfp always resolve their latest release, ohmyzsh clones
+# master's tip, and antigravity reads a "latest" manifest. Each now installs from a reviewed vendored copy that names a
+# fixed release, commit, or manifest.
+_mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor/installers/<tool>.sh at a commit and the hash matches
+    local tool="$1" copy url sha
+    copy="$PROJECT_ROOT/vendor/installers/$tool.sh"
+    [[ -f "$copy" ]] || { echo "no vendored $tool installer"; return 1; }
+    url="$(awk -v t="  $tool:" '$0==t{getline; print}' "$PROJECT_ROOT/checksums.yaml" | sed -E 's/.*url: "//; s/"$//')"
+    [[ "$url" =~ ^https://raw\.githubusercontent\.com/tkfor21/agentic_coding_flywheel_setup/[0-9a-f]{40}/vendor/installers/$tool\.sh$ ]] \
+        || { echo "$tool URL is not the vendored copy at a commit: $url"; return 1; }
+    sha="$(awk -v t="  $tool:" '$0==t{getline; getline; print}' "$PROJECT_ROOT/checksums.yaml" | grep -o '[0-9a-f]\{64\}')"
+    [[ "$(sha256sum "$copy" | cut -d' ' -f1)" == "$sha" ]] || { echo "vendored $tool.sh doesn't match its hash"; return 1; }
+}
+
+@test "mac-flywheel: bv, slb and jfp install a fixed release (vendored installers)" {
+    local t
+    for t in bv slb jfp; do
+        run _mf_vendored_entry_ok "$t"
+        assert_success
+    done
+    run grep -F 'releases/tags/${BV_PINNED_TAG}' "$PROJECT_ROOT/vendor/installers/bv.sh"
+    assert_success
+    run grep -F 'BV_PINNED_TAG="v0.26.0"' "$PROJECT_ROOT/vendor/installers/bv.sh"
+    assert_success
+    run grep -F 'releases/latest' "$PROJECT_ROOT/vendor/installers/bv.sh"
+    assert_failure
+    run grep -F 'VERSION="v0.6.0"' "$PROJECT_ROOT/vendor/installers/slb.sh"
+    assert_success
+    run grep -F 'releases/download/v1.0.3' "$PROJECT_ROOT/vendor/installers/jfp.sh"
+    assert_success
+    run grep -F 'releases/latest' "$PROJECT_ROOT/vendor/installers/jfp.sh"
+    assert_failure
+}
+
+@test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
+    run _mf_vendored_entry_ok ohmyzsh
+    assert_success
+    run grep -F 'OMZ_PINNED_SHA="6010fb6260f359e71d99ba25f05f9215809b3ed2"' "$copy"
+    assert_success
+    run grep -F 'git fetch --depth=1 origin "$OMZ_PINNED_SHA"' "$copy"
+    assert_success
+    run grep -F '[ "$(git rev-parse HEAD)" = "$OMZ_PINNED_SHA" ]' "$copy"
+    assert_success
+    run grep -F 'origin/$BRANCH"' "$copy"
+    assert_failure
+}
+
+@test "mac-flywheel: antigravity installs a recorded 1.5.9 manifest, not the latest one (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/antigravity.sh"
+    run _mf_vendored_entry_ok antigravity
+    assert_success
+    run grep -F '"version":"1.5.9"' "$copy"
+    assert_success
+    run grep -F 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.9-4515810895593472/linux-arm/cli_linux_arm64.tar.gz' "$copy"
+    assert_success
+    run grep -F '16c632a09b81f598f7652bc11180861f9d2ee4408ffa161dadc83b2010de7a9cd055e97b4b46cd01903e35c0e8bf21d8262462ba7c5f168cc6dada9ac3d522c0' "$copy"
+    assert_success
+    run grep -E 'manifest_json=\$\(fetch_manifest' "$copy"
+    assert_failure
+}
+
 @test "mac-flywheel: install and update both apply argument pins" {
     run grep -F 'acfs_installer_args_with_pins "$tool" "$@"' "$PROJECT_ROOT/install.sh"
     assert_success

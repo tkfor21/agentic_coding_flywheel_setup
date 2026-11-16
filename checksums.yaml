@@ -3,8 +3,8 @@
 
 installers:
   antigravity:
-    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/a9faa5d523e690affb536f072044aacd6de0d694/vendor/installers/antigravity.sh"
-    sha256: "62966c07365423bd4dc209355060744058fb30d60f5323e2d360e39de64e5042"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/627cb969cc62400c29b134e0d2153c7ad546bde2/vendor/installers/antigravity.sh"
+    sha256: "855dae3c057f3d7caab60558136346172027d974e7b1dd4517b242cb694af6a9"
 
   apr:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/automated_plan_reviser_pro/ca114b357fbff5a3c8428c9ac0365ef31bf21f65/install.sh"
@@ -31,8 +31,8 @@ installers:
     sha256: "04882bf41679d49d9af108657a1e5515bf04fdf2940d12c0d0b1e5d79dc53be8"
 
   bv:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/beads_viewer/516e96aa1ac78d6f634b0d394f5102bf430de016/install.sh"
-    sha256: "13a80ec48ef72b3f50f2f9ce49453175dc5e80afcf11f996ec2ed97356544f0c"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/627cb969cc62400c29b134e0d2153c7ad546bde2/vendor/installers/bv.sh"
+    sha256: "8db04bd37400c791dd320f35763063bd78ed7a159bf7195856993efbd0df4ee9"
 
   caam:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_account_manager/d3da90e7dea82a7715dd6462fe98c8719dd55881/install.sh"
@@ -91,8 +91,8 @@ installers:
     sha256: "7fd6fdc75d9418b2e58356726fcbf1ae849416f773925da07d0ccc7a60d3e791"
 
   jfp:
-    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/a9faa5d523e690affb536f072044aacd6de0d694/vendor/installers/jfp.sh"
-    sha256: "6b82c8d88ad7de4524679cd08406117177f3643b34028b611447fb9c69f4fc4e"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/627cb969cc62400c29b134e0d2153c7ad546bde2/vendor/installers/jfp.sh"
+    sha256: "1565f36289f67f8b1f04e5e120422be1c365a0bb973434fdddc6b1a434800ec2"
 
   mcp_agent_mail:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail_rust/b9df0023124b28f4115058ba436cc7eeecbc1a31/install.sh"
@@ -115,8 +115,8 @@ installers:
     sha256: "abdb525ee9f5b48b34d8ed9fc67c6013fb0f659712e401ecd88ab989b3af8f53"
 
   ohmyzsh:
-    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/a9faa5d523e690affb536f072044aacd6de0d694/vendor/installers/ohmyzsh.sh"
-    sha256: "3f9f1b6269deddc51cdcab2a689f54821e6e62c24401f970de4bfafad328b2ef"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/627cb969cc62400c29b134e0d2153c7ad546bde2/vendor/installers/ohmyzsh.sh"
+    sha256: "6e4c39b7615142cac3ccef5561863aa6cf48ca390d74ab86a29f5c7664bd7e45"
 
   omp:
     url: "https://omp.sh/install.sh"
@@ -167,8 +167,8 @@ installers:
     sha256: "75730b65737a66f0beb6029ff4d0ede4e6cb9f0794e8c39438c3a7f2d198a854"
 
   slb:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/simultaneous_launch_button/a0ab00fcc6d4d3e35af147a2ec8d6a89aa21853b/scripts/install.sh"
-    sha256: "5ae8ab030d372a8bd22460fabd647427a5903d076ad93da198465d2b280acc1d"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/627cb969cc62400c29b134e0d2153c7ad546bde2/vendor/installers/slb.sh"
+    sha256: "d7712a54f34d8be4164f0da1f439ddc6c097800e0598faf516ecabca68388dca"
 
   srps:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/system_resource_protection_script/07621deb5a93abe2c4b60a0f336e79870ff9749a/install.sh"
