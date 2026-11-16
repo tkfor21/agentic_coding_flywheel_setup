@@ -494,7 +494,7 @@ EOF
         done <<< "${ACFS_INSTALLER_PIN_ENV[$tool]}"
     done
     [[ "$(acfs_installer_pin_env br)" == "BR_INSTALLER_SELF_REEXEC=1" ]] || fail "br pin missing"
-    [[ "$(acfs_installer_pin_env ru)" == "RU_INSTALLER_NO_SELF_REFRESH=1" ]] || fail "ru pin missing"
+    [[ "$(acfs_installer_pin_env ru)" == *"RU_INSTALLER_NO_SELF_REFRESH=1"* ]] || fail "ru pin missing"
     [[ -z "$(acfs_installer_pin_env no_such_tool)" ]] || fail "an unknown tool has pins"
 }
 
@@ -530,7 +530,7 @@ EOF
 
     run _acfs_installer_runner_env ru "RU_NON_INTERACTIVE=1"
     assert_success
-    assert_output "$(printf 'RU_NON_INTERACTIVE=1\nRU_INSTALLER_NO_SELF_REFRESH=1')"
+    assert_output "$(printf 'RU_NON_INTERACTIVE=1\nRU_INSTALLER_NO_SELF_REFRESH=1\nRU_VERSION=1.7.0')"
 
     run _acfs_installer_runner_env br ""
     assert_success
@@ -824,6 +824,17 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     VERSION=latest run bash "$copy" --no-gum
     assert_failure
     assert_output --partial "Refusing"
+}
+
+@test "mac-flywheel: ru is pinned to 1.7.0 through the environment, with self-refresh still off" {
+    # ru's installer reads its version only from $RU_VERSION; without it, it installs releases/latest. With it, it
+    # installs exactly that release and requires its checksum (no fallback), so no vendored copy is needed.
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "$(acfs_installer_pin_env ru)" == $'RU_INSTALLER_NO_SELF_REFRESH=1\nRU_VERSION=1.7.0' ]] \
+        || fail "ru env pins: '$(acfs_installer_pin_env ru)'"
+    [[ -z "${ACFS_INSTALLER_PIN_ARGS[ru]:-}" ]] || fail "ru takes no version argument"
+    acfs_installer_pin_env_allowed "RU_VERSION=1.7.0" || fail "the clean runner must allow RU_VERSION=1.7.0"
+    ! acfs_installer_pin_env_allowed "RU_UNSAFE_MAIN=1" || fail "the clean runner must never allow RU_UNSAFE_MAIN"
 }
 
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {

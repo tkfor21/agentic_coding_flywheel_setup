@@ -720,12 +720,15 @@ declare -ga ACFS_SECURITY_REQUIRED_INSTALLERS=("${!KNOWN_INSTALLERS[@]}")
 #   br: run from stdin, its installer would exec main's install.sh instead of the verified bytes (br.sh:62-92).
 #   ru: its self-refresh can't fire under bash 5.2 today; pinned off anyway so it can't start to.
 #   asb, giil: version pins; their installers take the version only from the environment.
+#   ru (step 5, 2026-11-16): RU_VERSION=1.7.0, what e2e 20261116-055116's acfs doctor reported (also ru's newest
+#        release). With it set, ru's installer downloads that exact release and requires its checksum, with no fallback;
+#        its main-branch path needs RU_UNSAFE_MAIN=1, which the clean runner never passes. No vendored copy needed.
 #   rch (step 5, 2026-11-16): 2.1.36, what e2e 20261116-052847's acfs doctor reported (also rch's newest release). Its
 #        installer has no --version flag (an unknown flag exits 1) and reads only $VERSION. Vendored copy too, with
 #        the same default and no automatic source build (its tag's toolchain file pulls a nightly).
 declare -gA ACFS_INSTALLER_PIN_ENV=(
     [br]="BR_INSTALLER_SELF_REEXEC=1"
-    [ru]="RU_INSTALLER_NO_SELF_REFRESH=1"
+    [ru]=$'RU_INSTALLER_NO_SELF_REFRESH=1\nRU_VERSION=1.7.0'
     [asb]="ASB_VERSION=v0.3.7"
     [giil]="GIIL_VERSION=3.2.1"
     [rch]="VERSION=2.1.36"
