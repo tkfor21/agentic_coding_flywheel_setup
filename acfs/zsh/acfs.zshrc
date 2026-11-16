@@ -323,6 +323,8 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
         # ("node", "lts/*") need nvm to resolve, so fall back to newest installed.
         _acfs_nvm_default=""
         [[ -r "$NVM_DIR/alias/default" ]] && _acfs_nvm_default="$(<"$NVM_DIR/alias/default")"
+        # mac-flywheel local: `nvm alias default 26.13.1` writes the bare version; it is just as concrete.
+        [[ "$_acfs_nvm_default" == [0-9]* ]] && _acfs_nvm_default="v$_acfs_nvm_default"
         if [[ "$_acfs_nvm_default" == v* && -x "$NVM_DIR/versions/node/$_acfs_nvm_default/bin/node" ]]; then
             _acfs_nvm_bin="$NVM_DIR/versions/node/$_acfs_nvm_default/bin"
         else
