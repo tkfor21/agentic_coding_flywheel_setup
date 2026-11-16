@@ -70,6 +70,12 @@ D2="$WORK/nvm2"; make_nvm_dir "$D2" "${VERSIONS[@]}"; mkdir -p "$D2/alias"; prin
 check "pinned default alias wins" \
     "versions/node/v10.0.0/bin|0|versions/node/v10.0.0/bin" "$(run_block "$D2")"
 
+# mac-flywheel local: `nvm alias default 26.13.1` writes the bare version (no "v"). It is just as concrete and must
+# win too; falling back to the newest installed would hand zsh a later Node (seen: a v27 alpha) over the pin.
+D2b="$WORK/nvm2b"; make_nvm_dir "$D2b" "${VERSIONS[@]}"; mkdir -p "$D2b/alias"; printf '10.0.0\n' > "$D2b/alias/default"
+check "bare pinned default alias (no v) wins" \
+    "versions/node/v10.0.0/bin|0|versions/node/v10.0.0/bin" "$(run_block "$D2b")"
+
 D3="$WORK/nvm3"; make_nvm_dir "$D3" "${VERSIONS[@]}"; mkdir -p "$D3/alias"; printf 'lts/*\n' > "$D3/alias/default"
 check "symbolic default alias falls back to newest" \
     "versions/node/v22.10.1/bin|0|versions/node/v22.10.1/bin" "$(run_block "$D3")"
