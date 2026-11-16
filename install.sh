@@ -8897,6 +8897,17 @@ _acfs_pinned_node_version() {
     printf '%s\n' "$version"
 }
 
+# mac-flywheel local: the one Rust toolchain ACFS installs (security.sh ACFS_RUST_PINNED_TOOLCHAIN). Refuses anything but
+# a plain stable X.Y.Z: no channel (nightly, stable, beta, which move), no dated nightly, no prerelease, no host triple.
+_acfs_pinned_rust_toolchain() {
+    local toolchain="${ACFS_RUST_PINNED_TOOLCHAIN:-}"
+    if [[ ! "$toolchain" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Refusing Rust toolchain '${toolchain:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release (no channel, nightly, beta or prerelease)"
+        return 1
+    fi
+    printf '%s\n' "$toolchain"
+}
+
 # The pinned Node is installed (under ~/.nvm, or ~/.config/nvm when NVM_DIR was preset in the login environment, e.g. by
 # mise/omarchy dotfiles). Any other installed Node, such as a newer alpha, doesn't count.
 _target_has_nvm_node() {
@@ -8994,16 +9005,27 @@ install_languages_legacy_lang() {
     # from nvm and broke TypeScript builds. Bun already handles #!/usr/bin/env node
     # shebangs natively when running .js files via bun, so the symlink was unnecessary.
 
-    # Rust nightly (install as target user)
-    # We use nightly for latest features and to install tools like dust/lsd
+    # Rust (install as target user). mac-flywheel local: the pinned stable toolchain (security.sh
+    # ACFS_RUST_PINNED_TOOLCHAIN), never the nightly channel upstream installs. rustup-init also makes it the default
+    # on a machine that already has rustup (e.g. an earlier nightly default).
     local cargo_bin="$TARGET_HOME/.cargo/bin/cargo"
     if acfs_legacy_module_selected "lang.rust" && ! acfs_should_skip_module "lang.rust"; then
-        log_detail "Installing Rust nightly for $TARGET_USER"
-        try_step "Installing Rust nightly" acfs_run_verified_upstream_script_as_target "rust" "sh" -y --default-toolchain nightly || {
-            ACFS_MODULE_FAILURES+=("lang.rust (${ACFS_LAST_MODULE_FAILURE_REASON:-installation failed})")
-            ACFS_LAST_MODULE_FAILURE_REASON=""
+        local rust_toolchain=""
+        if ! rust_toolchain="$(_acfs_pinned_rust_toolchain)"; then
+            ACFS_MODULE_FAILURES+=("lang.rust (no valid pinned toolchain)")
             lang_rc=1
-        }
+        else
+            log_detail "Installing Rust $rust_toolchain for $TARGET_USER"
+            if ! try_step "Installing Rust $rust_toolchain" acfs_run_verified_upstream_script_as_target "rust" "sh" -y --default-toolchain "$rust_toolchain"; then
+                ACFS_MODULE_FAILURES+=("lang.rust (${ACFS_LAST_MODULE_FAILURE_REASON:-installation failed})")
+                ACFS_LAST_MODULE_FAILURE_REASON=""
+                lang_rc=1
+            elif ! run_as_target "$TARGET_HOME/.cargo/bin/rustc" --version 2>/dev/null | grep -q "^rustc ${rust_toolchain//./\\.} "; then
+                log_error "Rust: the default toolchain is not the pinned $rust_toolchain"
+                ACFS_MODULE_FAILURES+=("lang.rust (default toolchain is not $rust_toolchain)")
+                lang_rc=1
+            fi
+        fi
     fi
 
     # Go (system-wide)

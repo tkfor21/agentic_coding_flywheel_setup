@@ -833,6 +833,47 @@ _mf_load_node_helpers() {
 
 # mac-flywheel local: nvm's installer is pinned at v0.41.0. v0.40.1 carried CVE-2026-10796 (fixed in v0.40.5) and resolves
 # `nvm install node` to Node's v27 alpha now that Node's index lists it first; v0.41.0 skips alphas (guest-verified).
+# mac-flywheel local: Rust is pinned to one exact stable release (security.sh ACFS_RUST_PINNED_TOOLCHAIN), never the
+# nightly channel ACFS used to install, and never a moving channel name (Joel, 2026-11-16: stable, no prerelease).
+_mf_pinned_rust() { sed -n 's/^ACFS_RUST_PINNED_TOOLCHAIN="\(.*\)"$/\1/p' "$PROJECT_ROOT/scripts/lib/security.sh"; }
+
+@test "mac-flywheel: Rust is pinned to one exact stable release" {
+    run _mf_pinned_rust
+    assert_output "1.100.0"
+}
+
+@test "mac-flywheel: _acfs_pinned_rust_toolchain refuses channels, prereleases, dated nightlies and partial versions" {
+    log_error() { echo "log_error $*" >&2; }
+    eval "$(sed -n '/^_acfs_pinned_rust_toolchain() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    declare -F _acfs_pinned_rust_toolchain >/dev/null || fail "_acfs_pinned_rust_toolchain not found in install.sh"
+    local bad
+    for bad in "nightly" "stable" "beta" "nightly-2026-08-31" "1.101.0-beta.1" "1.100" "v1.100.0" ""; do
+        ACFS_RUST_PINNED_TOOLCHAIN="$bad"
+        run _acfs_pinned_rust_toolchain
+        assert_failure
+        assert_output --partial "Refusing Rust toolchain"
+    done
+    ACFS_RUST_PINNED_TOOLCHAIN="1.100.0"
+    run _acfs_pinned_rust_toolchain
+    assert_success
+    assert_output "1.100.0"
+}
+
+@test "mac-flywheel: install, the manifest and the generated installers install the pinned Rust, never nightly" {
+    local pinned f
+    pinned="$(_mf_pinned_rust)"
+    run grep -F -- '--default-toolchain "$rust_toolchain"' "$PROJECT_ROOT/install.sh"
+    assert_success
+    run grep -F -- "\"--default-toolchain\", \"$pinned\"" "$PROJECT_ROOT/acfs.manifest.yaml"
+    assert_success
+    for f in "$PROJECT_ROOT/install.sh" "$PROJECT_ROOT/acfs.manifest.yaml" "$PROJECT_ROOT"/scripts/generated/*.sh; do
+        run grep -E -- "--default-toolchain[\"', ]+nightly|rustup show \| grep -q nightly" "$f"
+        assert_failure
+    done
+    run grep -F -- "'--default-toolchain' '$pinned'" "$PROJECT_ROOT/scripts/generated/install_lang.sh"
+    assert_success
+}
+
 @test "mac-flywheel: nvm's installer is pinned at v0.41.0, not the vulnerable v0.40.1" {
     local url sha
     url="$(awk '$0=="  nvm:"{getline; print}' "$PROJECT_ROOT/checksums.yaml")"

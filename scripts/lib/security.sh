@@ -733,6 +733,13 @@ declare -gA ACFS_INSTALLER_PIN_ENV=(
 # acfs.manifest.yaml (lang.nvm, agents.gemini) repeats this version for the generated installers; keep them equal.
 ACFS_NODE_PINNED_VERSION="26.13.1"
 
+# mac-flywheel local: the ONE Rust toolchain ACFS installs, an exact stable release (rust-lang/rust releases/latest
+# 1.100.0, published 2026-11-12; Joel, 2026-11-16: stable, not nightly). Never a channel name (nightly, stable, beta),
+# which moves, and never a prerelease. install.sh (_acfs_pinned_rust_toolchain) and update.sh
+# (update_pinned_rust_toolchain) refuse anything but a plain X.Y.Z. acfs.manifest.yaml (lang.rust) repeats this
+# version for the generated installers; keep them equal.
+ACFS_RUST_PINNED_TOOLCHAIN="1.100.0"
+
 # mac-flywheel local: per-installer ARGUMENT pins (phase 2 step 3), one argument per line, put BEFORE the call
 # site's own arguments (acfs_installer_args_with_pins), so an installer that stops parsing at a call site's `--`
 # still sees them. Each value is the version the last passing e2e (20261112-154404, pin df91579f) actually

@@ -41,7 +41,7 @@ export interface ManifestProvenanceMetadata {
 
 export const manifestProvenance = {
   acfsVersion: "0.10.0",
-  manifestSha256: "48aa453dc0af9560a75359e0bb65947ca4b5129c1fe4d72b233a4ff7ea0db214",
+  manifestSha256: "d98fe8fa1d17210a8e2f97cda1a8747fdcdb01dd1e306557f63033b2387ca72d",
   checksumsYamlSha256: "f088648b335881a11c0b5cba26e97c6812c020eb5569d3d94ecf045bdad96de6",
 } as const satisfies ManifestProvenanceMetadata;
 
@@ -248,7 +248,7 @@ export const manifestModules: ManifestModuleMetadata[] = [
   },
   {
     id: "lang.rust",
-    description: "Rust nightly + cargo",
+    description: "Rust 1.100.0 (pinned stable) + cargo",
     category: "lang",
     phase: 6,
     dependencies: [

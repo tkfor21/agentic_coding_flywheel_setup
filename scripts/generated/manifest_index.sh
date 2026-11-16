@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="48aa453dc0af9560a75359e0bb65947ca4b5129c1fe4d72b233a4ff7ea0db214"
+ACFS_MANIFEST_SHA256="d98fe8fa1d17210a8e2f97cda1a8747fdcdb01dd1e306557f63033b2387ca72d"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -661,7 +661,7 @@ declare -gA ACFS_MODULE_DESC=(
   ['network.ssh_keepalive']="Configure SSH server keepalive to prevent VPN/NAT disconnects"
   ['lang.bun']="Bun runtime for JS tooling and global CLIs"
   ['lang.uv']="uv Python tooling (fast venvs)"
-  ['lang.rust']="Rust nightly + cargo"
+  ['lang.rust']="Rust 1.100.0 (pinned stable) + cargo"
   ['lang.go']="Go toolchain"
   ['lang.nvm']="nvm + latest Node.js"
   ['tools.atuin']="Atuin CLI with guarded agent-safe shim"
@@ -1313,7 +1313,7 @@ user_login_shell_configured'
   ['lang.bun.0']='~/.bun/bin/bun --version'
   ['lang.uv.0']='command -v uv >/dev/null 2>&1 && uv --version'
   ['lang.rust.0']='~/.cargo/bin/cargo --version'
-  ['lang.rust.1']='~/.cargo/bin/rustup show | grep -q nightly'
+  ['lang.rust.1']='~/.cargo/bin/rustc --version | grep -q '\''^rustc 1\.100\.0 '\'''
   ['lang.go.0']='go version'
   ['lang.nvm.0']='export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
