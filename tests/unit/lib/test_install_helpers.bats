@@ -1054,6 +1054,29 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: srps pins ananicy-cpp, the CachyOS rules and sysmoni (vendored installer)" {
+    # srps compiled ananicy-cpp (a root daemon) from GitLab's moving default branch, cloned the CachyOS rules' moving
+    # master (also in its srps-pull-rules helper), and took sysmoni-go from releases/latest with a Go source fallback.
+    local copy="$PROJECT_ROOT/vendor/installers/srps.sh"
+    run _mf_vendored_entry_ok srps
+    assert_success
+    run grep -E '^SRPS_ANANICY_CPP_COMMIT="[0-9a-f]{40}"$' "$copy"
+    assert_success
+    run grep -Fx 'SRPS_ANANICY_RULES_COMMIT="03ef03fbf7e834385377432ccecaedd32e3414bb"' "$copy"
+    assert_success
+    # No unpinned clone of either repository remains, including in the generated srps-pull-rules helper.
+    ! grep -E 'git clone[^|]*(ananicy-cpp|ananicy-rules)' "$copy" || fail "an unpinned ananicy clone remains"
+    run grep -c -F '03ef03fbf7e834385377432ccecaedd32e3414bb' "$copy"
+    [[ "$output" -ge 3 ]] || fail "the rules commit must pin the install clone and srps-pull-rules ($output)"
+    # sysmoni: the pinned release, never main/latest, never a Go source build.
+    run grep -Fx '    local ref="${SRPS_SYSMONI_REF:-v1.4.3}"' "$copy"
+    assert_success
+    ! grep -F 'releases/latest' "$copy" || fail "a releases/latest lookup remains"
+    ! grep -F 'will try to build from source' "$copy" || fail "the sysmoni Go source build remains"
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "$(acfs_installer_pin_env srps)" == "SRPS_SYSMONI_REF=v1.4.3" ]] || fail "srps env pin: '$(acfs_installer_pin_env srps)'"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh
