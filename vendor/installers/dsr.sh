@@ -40,10 +40,12 @@ umask 022
 # Configuration Defaults
 # ============================================================
 
-# mac-flywheel local patch (vendored copy; the original's bytes are sha256 2680dc30...). Two changes only: OWNER
-# points at Joel's dsr fork, and the default clone ref is the frozen tag mf-725df35a (dsr main at 2026-11-12
-# 21:16 UTC, what the last passing e2e installed) instead of the moving main.
+# mac-flywheel local patch (vendored copy; the original's bytes are sha256 2680dc30...). Three changes only: OWNER
+# points at Joel's dsr fork, the default clone ref is the frozen tag mf-725df35a (dsr main at 2026-11-12 21:16 UTC,
+# what the last passing e2e installed) instead of the moving main, and the clone must be exactly DSR_PINNED_SHA
+# (a tag can be moved; clone_repo_ref refuses anything else).
 OWNER="tkfor21"
+DSR_PINNED_SHA="725df35a88cd1a9df0f95c2922b8a792f0bf4460"
 REPO="doodlestein_self_releaser"
 BINARY_NAME="dsr"
 INSTALLER_VERSION="0.2.3"
@@ -700,7 +702,13 @@ clone_repo_ref() {
   local destination="$3"
 
   git clone --quiet --depth 1 --branch "$clone_ref" \
-    "https://github.com/${OWNER}/${REPO}.git" "$destination" 2>"$error_file"
+    "https://github.com/${OWNER}/${REPO}.git" "$destination" 2>"$error_file" || return 1
+  # mac-flywheel local patch: a tag can be moved, so refuse anything but the reviewed commit.
+  if [ "$(git -C "$destination" rev-parse HEAD 2>/dev/null)" = "$DSR_PINNED_SHA" ]; then
+    return 0
+  fi
+  echo "dsr clone of $clone_ref is not the pinned commit $DSR_PINNED_SHA" >"$error_file"
+  return 1
 }
 
 print_clone_error() {

@@ -23,6 +23,8 @@ set -euo pipefail
 # being replaced with mdwb's 0.13.0 (mac-flywheel #60).
 REPO_URL="${MDWB_REPO_URL:-https://github.com/tkfor21/markdown_web_browser.git}"
 MDWB_PINNED_REF="mf-28edccfe"
+# A tag can be moved, so the checkout must be exactly this commit (setup_repository refuses anything else).
+MDWB_PINNED_SHA="28edccfede2d09b0e94146bc612f7a4dc41792c2"
 DEFAULT_INSTALL_DIR="./markdown_web_browser"
 PYTHON_VERSION="${MDWB_PYTHON_VERSION:-3.13}"
 APT_LOCK_WAIT_SECONDS="${MDWB_APT_LOCK_WAIT_SECONDS:-300}"
@@ -401,6 +403,11 @@ setup_repository() {
         cd "$INSTALL_DIR" || return 1
     fi
 
+    # mac-flywheel local patch: refuse any checkout that isn't the reviewed commit.
+    if [ "$(git rev-parse HEAD)" != "$MDWB_PINNED_SHA" ]; then
+        print_color "$RED" "Error: checkout is $(git rev-parse HEAD), not the pinned commit $MDWB_PINNED_SHA"
+        exit 1
+    fi
     print_color "$GREEN" "✓ Repository ready"
 }
 
