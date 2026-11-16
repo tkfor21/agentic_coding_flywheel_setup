@@ -111,8 +111,8 @@ installers:
     sha256: "83231b6313939b4cc67be84f16c52cb5485a944b2bf8c3bd668bd8823c4488bc"
 
   nvm:
-    url: "https://raw.githubusercontent.com/nvm-sh/nvm/179d45050be0a71fd57591b0ed8aedf9b177ba10/install.sh"
-    sha256: "abdb525ee9f5b48b34d8ed9fc67c6013fb0f659712e401ecd88ab989b3af8f53"
+    url: "https://raw.githubusercontent.com/nvm-sh/nvm/4e8758a801eea9479b32a904f31093e410ddaba4/install.sh"
+    sha256: "045932fe05f0d4247c946f2ec0ec4026dbfd8ce88a5f67ea28d8ea833227f48b"
 
   ohmyzsh:
     url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/627cb969cc62400c29b134e0d2153c7ad546bde2/vendor/installers/ohmyzsh.sh"
