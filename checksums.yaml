@@ -19,8 +19,8 @@ installers:
     sha256: "a30cdd4af613f352f7e533f8a5416b25978d788664f6bb63ad224d4f2fd66b63"
 
   br:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/1a7c6a5e9597975949858dadff3b9af3ae21234a/install.sh"
-    sha256: "0d0e0b696c20d669fcfe7e1c55de404201d9a60bc5c73673974c849340daefc5"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/3be2568dbb72a47b0a346cbaf4142257b3e567a7/vendor/installers/br.sh"
+    sha256: "503a0017cd37df3d4452183ea3939fbc0d0cec7043d666ae2cdd64bb8d5c45ee"
 
   brenner_bot:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/brenner_bot/7aa890a4ffcf9c98f00f6a71751fe6cc65dc974d/install.sh"

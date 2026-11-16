@@ -752,6 +752,24 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: br installs a fixed release and never falls back to a source build (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/br.sh"
+    run _mf_vendored_entry_ok br
+    assert_success
+    # The default is the pinned release (not inherited from the environment), and it agrees with the pin table.
+    run grep -Fx 'VERSION="v0.7.6"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[br]:-}" == $'--version\nv0.7.6' ]] || fail "br pin: '${ACFS_INSTALLER_PIN_ARGS[br]:-<none>}'"
+    # The original builds from source when the download fails or no version resolves, and the tag's
+    # rust-toolchain.toml pulls nightly-2026-08-31 (Joel: never prerelease). The copy fails instead.
+    ! grep -F 'Binary download failed, building from source' "$copy" || fail "download failure still builds from source"
+    ! grep -F 'No release version found, building from source' "$copy" || fail "no version still builds from source"
+    run bash "$copy" --version latest
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh

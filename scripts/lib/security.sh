@@ -763,9 +763,12 @@ ACFS_AST_GREP_PINNED_VERSION="0.51.2"
 #        20261116-005708), and `--version` goes to `git clone --branch`, which can't take a commit. Step 4.
 #   sbh (step 5, 2026-11-16): v0.7.16, the newest release before e2e 20261116-042123 started (published 05:12 UTC,
 #        run at 10:21 UTC; doctor doesn't report sbh's version). Its installer takes `--version <tag>`.
+#   br (step 5, 2026-11-16): v0.7.6, what e2e 20261116-042123's acfs doctor reported (also br's newest release).
+#        Vendored copy too: no silent source build (its tag's toolchain file pulls a nightly).
 #   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
 #         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
+    [br]=$'--version\nv0.7.6'
     [brenner_bot]=$'--version\nv0.4.1'
     [bun]="bun-v1.4.4"
     [caam]="--version=v0.1.25"
