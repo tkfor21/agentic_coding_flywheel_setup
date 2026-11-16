@@ -19,8 +19,8 @@ set -euo pipefail
 # Configuration
 # mac-flywheel local patch (vendored copy; the original's bytes are sha256 2f808a76...). Three changes only: the
 # repo is Joel's mdwb fork, every install checks out the frozen tag MDWB_PINNED_REF (mdwb main at 2026-11-01, what
-# the last passing e2e cloned) instead of the moving default branch or main, and an existing uv is kept instead of
-# being replaced with mdwb's 0.13.0 (mac-flywheel #60).
+# the last passing e2e cloned) instead of the moving default branch or main (and must be exactly MDWB_PINNED_SHA),
+# and install_uv looks in ~/.local/bin first, so an existing uv is kept, not replaced with 0.13.0 (mac-flywheel #60).
 REPO_URL="${MDWB_REPO_URL:-https://github.com/tkfor21/markdown_web_browser.git}"
 MDWB_PINNED_REF="mf-28edccfe"
 # A tag can be moved, so the checkout must be exactly this commit (setup_repository refuses anything else).
@@ -264,6 +264,9 @@ verify_uv_installer() {
 }
 
 install_uv() {
+    # mac-flywheel local patch: look where uv installs (and where ACFS put its pinned uv) before deciding uv is
+    # missing. ACFS's clean runner PATH has no ~/.local/bin, so without this an existing uv was replaced (#60).
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     if command_exists uv; then
         print_color "$GREEN" "✓ uv is already installed"
         return 0
@@ -840,12 +843,7 @@ main() {
     mkdir -p "$(dirname "$INSTALL_DIR")"
 
     # Run installation steps
-    # mac-flywheel local patch: keep an existing uv (ACFS installs its pinned uv before mdwb) instead of replacing it.
-    if command_exists uv; then
-        print_color "$BLUE" "Using the existing uv: $(uv --version 2>/dev/null)"
-    else
-        install_uv
-    fi
+    install_uv
     install_system_deps
     setup_repository
     setup_python_env
