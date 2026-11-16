@@ -16453,7 +16453,7 @@ EOF
 
     run update_installer_env_with_pins ru "RU_NON_INTERACTIVE=1"
     assert_success
-    assert_output "$(printf 'RU_NON_INTERACTIVE=1\nRU_INSTALLER_NO_SELF_REFRESH=1')"
+    assert_output "$(printf 'RU_NON_INTERACTIVE=1\nRU_INSTALLER_NO_SELF_REFRESH=1\nRU_VERSION=1.7.0')"
 
     run update_installer_env_with_pins br ""
     assert_success
