@@ -989,6 +989,8 @@ ACFS_AST_GREP_PINNED_VERSION="0.51.2"
 #   dsr: deliberately absent. Its installer clones main by default, so a passing run had main's code, not the
 #        last release; `--version v0.2.3` fails ("missing required bootstrap module: platforms.sh", e2e
 #        20261116-005708), and `--version` goes to `git clone --branch`, which can't take a commit. Step 4.
+#   sbh (step 5, 2026-11-16): v0.7.16, the newest release before e2e 20261116-042123 started (published 05:12 UTC,
+#        run at 10:21 UTC; doctor doesn't report sbh's version). Its installer takes `--version <tag>`.
 #   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
 #         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
@@ -1006,6 +1008,7 @@ declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [pfr]=$'--ref\nfa4439e1ccfa67c81e7ae09b004bcf55c338db2b'
     [rano]=$'--version\nv0.2.1'
     [s2p]=$'--version\nv0.3.4\n--verify'
+    [sbh]=$'--version\nv0.7.16'
     [tru]=$'--version\nv0.2.4'
 )
 
