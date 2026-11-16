@@ -793,6 +793,8 @@ ACFS_FSFS_PINNED_VERSION="v1.12.3"
 #        newest release). Vendored copy too: no fallback to the latest release's agent skill.
 #   fmd (step 5, 2026-11-16): v0.7.0 (acfs-local runs fmd 0.7.0; doctor doesn't report its version; also fmd's newest
 #        release). Vendored copy too: no releases/latest download aliases, no automatic source build.
+#   pi (step 5, 2026-11-16): v0.8.0 (acfs-local runs pi 0.8.0; doctor doesn't report its version; also pi's newest
+#        release). Vendored copy too: the agent skill never comes from main, and no automatic source build.
 #   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
 #         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
@@ -811,6 +813,7 @@ declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [ntm]="--version=v1.38.0"
     [opencode]=$'--version\n1.19.5'
     [pfr]=$'--ref\nfa4439e1ccfa67c81e7ae09b004bcf55c338db2b'
+    [pi]=$'--version\nv0.8.0'
     [pt]=$'--version\n2.3.0'
     [rano]=$'--version\nv0.2.1'
     [s2p]=$'--version\nv0.3.4\n--verify'
