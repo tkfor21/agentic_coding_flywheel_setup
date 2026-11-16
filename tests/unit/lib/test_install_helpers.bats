@@ -787,6 +787,25 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     assert_output --partial "Refusing"
 }
 
+@test "mac-flywheel: pt installs a fixed release and never reaches main or a source build (vendored installer)" {
+    local copy="$PROJECT_ROOT/vendor/installers/pt.sh"
+    run _mf_vendored_entry_ok pt
+    assert_success
+    run grep -Fx 'VERSION="2.3.0"' "$copy"
+    assert_success
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[pt]:-}" == $'--version\n2.3.0' ]] || fail "pt pin: '${ACFS_INSTALLER_PIN_ARGS[pt]:-<none>}'"
+    # The original re-executes main's live install.sh when stdin is a pipe, takes main's pt wrapper as a last download
+    # fallback, and builds from source when the pt-core download fails. The copy does none of these.
+    ! grep -F 'exec bash <(fetch_stdout' "$copy" || fail "the self-refresh from main remains"
+    ! grep -E '^ *"\$\{RAW_URL\}/pt"$' "$copy" || fail "main's pt wrapper is still a download fallback"
+    ! grep -F 'falling back to source build' "$copy" || fail "an automatic source build remains"
+    ! grep -F 'will fall back to source' "$copy" || fail "an automatic source build remains"
+    run bash "$copy" --version latest --no-gum
+    assert_failure
+    assert_output --partial "Refusing"
+}
+
 @test "mac-flywheel: ohmyzsh installs a fixed, verified commit (vendored installer)" {
     local copy="$PROJECT_ROOT/vendor/installers/ohmyzsh.sh"
     run _mf_vendored_entry_ok ohmyzsh

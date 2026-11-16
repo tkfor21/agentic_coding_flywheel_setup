@@ -767,6 +767,8 @@ ACFS_AST_GREP_PINNED_VERSION="0.51.2"
 #        Vendored copy too: no silent source build (its tag's toolchain file pulls a nightly).
 #   xf (step 5, 2026-11-16): v0.4.3, what e2e 20261116-050346's acfs doctor reported (also xf's newest release).
 #        Vendored copy too: --easy-mode no longer falls back to a source build (live rustup, nightly, main clone).
+#   pt (step 5, 2026-11-16): 2.3.0 (no "v"; its installer adds it), what e2e 20261116-050346's acfs doctor reported
+#        (also pt's newest release). Vendored copy too: no self-refresh from main, no main wrapper, no source build.
 #   giil: pinned (environment table) to the release 3.2.1, although its default installs main's giil script;
 #         a deliberate choice of the last release, verified to install in e2e 20261116-005708.
 declare -gA ACFS_INSTALLER_PIN_ARGS=(
@@ -783,6 +785,7 @@ declare -gA ACFS_INSTALLER_PIN_ARGS=(
     [ntm]="--version=v1.38.0"
     [opencode]=$'--version\n1.19.5'
     [pfr]=$'--ref\nfa4439e1ccfa67c81e7ae09b004bcf55c338db2b'
+    [pt]=$'--version\n2.3.0'
     [rano]=$'--version\nv0.2.1'
     [s2p]=$'--version\nv0.3.4\n--verify'
     [sbh]=$'--version\nv0.7.16'
