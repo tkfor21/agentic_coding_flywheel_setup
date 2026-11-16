@@ -11046,9 +11046,9 @@ UNIT_EOF
     if binary_installed "rch"; then
         log_detail "RCH already installed"
     elif [[ "$(uname -m 2>/dev/null)" == aarch64 || "$(uname -m 2>/dev/null)" == arm64 ]]; then
-        # RCH releases (v2.1.16) have no aarch64 Linux build, so its installer
-        # compiles from source; the step is long and quiet, not hung.
-        log_detail "Installing RCH: no ARM64 Linux release yet, building from source (the slowest step on ARM64)"
+        # mac-flywheel local: RCH v2.1.16 had no aarch64 Linux build and its installer compiled from source. The
+        # pinned v2.1.36 ships aarch64-unknown-linux-gnu, and the vendored installer never builds from source.
+        log_detail "Installing RCH (ARM64)"
         acfs_try_module_step "stack.rch" "Installing RCH" acfs_run_verified_upstream_script_as_target "rch" "bash" || acfs_optional_module_install_failed "rch" "RCH"
     else
         log_detail "Installing RCH"
