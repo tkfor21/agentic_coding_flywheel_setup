@@ -554,7 +554,8 @@ EOF
     run update_rust
     assert_success
 
-    grep -qx "toolchain install 1.100.0" "$log_file" || fail "no 'toolchain install 1.100.0': $(cat "$log_file")"
+    # `rustup toolchain install` self-updates rustup by default; --no-self-update keeps rustup at its frozen version.
+    grep -qx "toolchain install --no-self-update 1.100.0" "$log_file" || fail "no 'toolchain install --no-self-update 1.100.0': $(cat "$log_file")"
     grep -qx "default 1.100.0" "$log_file" || fail "no 'default 1.100.0': $(cat "$log_file")"
     ! grep -E "self update|update (stable|nightly)" "$log_file" || fail "a channel or rustup itself was updated"
 }
@@ -1410,40 +1411,46 @@ EOF
     assert_equal "${VERSION_AFTER[bun]}" "1.0.1"
 }
 
-@test "update_cargo_tools: runs cargo install --force" {
+@test "update_pinned_ast_grep_version: refuses prereleases, partial versions and names" {
+    local bad
+    for bad in "latest" "0.52.0-alpha.1" "0.51" "v0.51.2" ""; do
+        export ACFS_AST_GREP_PINNED_VERSION="$bad"
+        run update_pinned_ast_grep_version
+        assert_failure
+        assert_output --partial "Refusing ast-grep version"
+    done
+    export ACFS_AST_GREP_PINNED_VERSION="0.51.2"
+    run update_pinned_ast_grep_version
+    assert_success
+    assert_output "0.51.2"
+}
+
+# mac-flywheel local: ast-grep is reinstalled at its pinned version (cargo replaces a different version and skips the
+# same one), never --force'd to the newest crate.
+@test "update_cargo_tools: installs the pinned ast-grep, never the newest" {
     mkdir -p "$HOME/.cargo/bin"
-    
-    # Mock cargo
     local log_file="$HOME/cargo.log"
     cat > "$HOME/.cargo/bin/cargo" <<EOF
 #!/bin/bash
 echo "\$@" >> "$log_file"
 EOF
     chmod +x "$HOME/.cargo/bin/cargo"
-    
-    # Mock existing tools so update_cargo_tools attempts update
-    # sg needs to exist in PATH or .cargo/bin
-    touch "$HOME/.cargo/bin/sg"
-    chmod +x "$HOME/.cargo/bin/sg"
-    
-    # Mock get_version for sg
-    # We need sg in PATH for get_version
-    export PATH="$HOME/.cargo/bin:$PATH"
     cat > "$HOME/.cargo/bin/sg" <<EOF
 #!/bin/bash
 echo "0.1.0"
 EOF
     chmod +x "$HOME/.cargo/bin/sg"
-    
-    # Run update
+    export PATH="$HOME/.cargo/bin:$PATH"
+    export ACFS_AST_GREP_PINNED_VERSION="0.51.2"
+
     UPDATE_RUNTIME=true
     run update_cargo_tools
     assert_success
-    
-    # Verify cargo install called
-    run cat "$log_file"
-    assert_output --partial "install ast-grep --locked --force"
+
+    grep -qx "install ast-grep --version 0.51.2 --locked" "$log_file" || fail "ast-grep not pinned: $(cat "$log_file")"
+    ! grep -E "install ast-grep --locked" "$log_file" || fail "ast-grep installed without a version"
 }
+
 
 @test "update.sh: runtime resolver gates avoid inherited PATH leaks" {
     local update="$PROJECT_ROOT/scripts/lib/update.sh"

@@ -888,9 +888,10 @@ modules:
       run_as: target_user
       command: "command -v sg"
     install:
-      - ~/.cargo/bin/cargo install ast-grep --locked
+      # mac-flywheel local: security.sh ACFS_AST_GREP_PINNED_VERSION, an exact release; keep them equal.
+      - ~/.cargo/bin/cargo install ast-grep --version 0.51.2 --locked
     verify:
-      - sg --version
+      - ~/.cargo/bin/ast-grep --version | grep -qx 'ast-grep 0\.51\.2'
 
   # ============================================================
   # PHASE 7: Coding agents

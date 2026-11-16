@@ -8902,6 +8902,17 @@ _acfs_pinned_rust_toolchain() {
     printf '%s\n' "$toolchain"
 }
 
+# mac-flywheel local: the one ast-grep release ACFS builds with cargo (security.sh ACFS_AST_GREP_PINNED_VERSION). Refuses
+# anything but a plain X.Y.Z: an unversioned or partial `cargo install` takes the newest matching crate.
+_acfs_pinned_ast_grep_version() {
+    local version="${ACFS_AST_GREP_PINNED_VERSION:-}"
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Refusing ast-grep version '${version:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release"
+        return 1
+    fi
+    printf '%s\n' "$version"
+}
+
 # The pinned Node is installed (under ~/.nvm, or ~/.config/nvm when NVM_DIR was preset in the login environment, e.g. by
 # mise/omarchy dotfiles). Any other installed Node, such as a newer alpha, doesn't count.
 _target_has_nvm_node() {
@@ -9085,10 +9096,15 @@ install_languages_legacy_tools() {
 
     # ast-grep (sg) - required by UBS for syntax-aware scanning
     if acfs_legacy_module_selected "tools.ast_grep" && ! acfs_should_skip_module "tools.ast_grep"; then
-        if [[ -x "$cargo_bin" ]]; then
-            log_detail "Installing ast-grep (sg) via cargo"
-            if try_step "Installing ast-grep via cargo" run_as_target "$cargo_bin" install ast-grep --locked; then
-                log_success "ast-grep installed"
+        # mac-flywheel local: exactly the pinned release (security.sh ACFS_AST_GREP_PINNED_VERSION), never the newest crate.
+        local ast_grep_version=""
+        if ! ast_grep_version="$(_acfs_pinned_ast_grep_version)"; then
+            ACFS_MODULE_FAILURES+=("tools.ast_grep (no valid pinned version)")
+            tools_rc=1
+        elif [[ -x "$cargo_bin" ]]; then
+            log_detail "Installing ast-grep $ast_grep_version (sg) via cargo"
+            if try_step "Installing ast-grep $ast_grep_version via cargo" run_as_target "$cargo_bin" install ast-grep --version "$ast_grep_version" --locked; then
+                log_success "ast-grep $ast_grep_version installed"
             else
                 # A from-source Rust build on a small VPS can OOM; that must
                 # not abort the whole install (agents, cloud, stack, finalize)
