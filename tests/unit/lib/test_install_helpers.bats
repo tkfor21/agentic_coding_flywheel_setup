@@ -704,6 +704,67 @@ EOF
     assert_success
 }
 
+# mac-flywheel local, phase 2 step 3: version pins passed as installer arguments (security.sh
+# ACFS_INSTALLER_PIN_ARGS), put BEFORE the call site's own arguments.
+_mf_args_with_pins() { # tool args... -> one merged arg per line, empty args shown as <empty>
+    local a out
+    out="$(acfs_installer_args_with_pins "$@" | while IFS= read -r -d '' a; do printf '%s\n' "${a:-<empty>}"; done; exit "${PIPESTATUS[0]}")" || return $?
+    printf '%s\n' "$out"
+}
+
+@test "mac-flywheel: the installer argument pin table is well-formed" {
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    [[ "$(declare -p ACFS_INSTALLER_PIN_ARGS 2>/dev/null)" == "declare -A"* ]] || fail "ACFS_INSTALLER_PIN_ARGS is not an associative array"
+    local tool line
+    for tool in "${!ACFS_INSTALLER_PIN_ARGS[@]}"; do
+        [[ -n "${KNOWN_INSTALLERS[$tool]:-}" ]] || fail "$tool has argument pins but no installer"
+        while IFS= read -r line; do
+            [[ -n "$line" && "$line" != *[[:space:]]* ]] || fail "$tool: empty or whitespace-bearing pinned argument '$line'"
+        done <<< "${ACFS_INSTALLER_PIN_ARGS[$tool]}"
+    done
+    # ntm and caam silently ignore `--version vX` as two arguments; only the `=` form pins them.
+    [[ "${ACFS_INSTALLER_PIN_ARGS[ntm]}" == --version=v* ]] || fail "ntm must use --version=vX"
+    [[ "${ACFS_INSTALLER_PIN_ARGS[caam]}" == --version=v* ]] || fail "caam must use --version=vX"
+    # pcr's --version prints and exits without installing; it must never be pinned that way.
+    [[ -z "${ACFS_INSTALLER_PIN_ARGS[pcr]:-}" ]] || fail "pcr must not get argument pins"
+}
+
+@test "mac-flywheel: acfs_installer_args_with_pins puts pins first and keeps every call-site argument" {
+    source "$PROJECT_ROOT/scripts/lib/security.sh"
+    ACFS_INSTALLER_PIN_ARGS=( [demo]=$'--version\nv1.2.3' [demo_eq]="--version=v9" )
+
+    run _mf_args_with_pins demo --easy-mode --verify
+    assert_success
+    assert_output "$(printf -- '--version\nv1.2.3\n--easy-mode\n--verify')"
+
+    # Pins go before a call site's `--`, so an installer that stops parsing there still sees them.
+    run _mf_args_with_pins demo -- --skip-cass
+    assert_success
+    assert_output "$(printf -- '--version\nv1.2.3\n--\n--skip-cass')"
+
+    # No pins: the call site's arguments pass through exactly, including empty ones and spaces.
+    run _mf_args_with_pins nopins "" "a b" --x
+    assert_success
+    assert_output "$(printf -- '<empty>\na b\n--x')"
+
+    # A flag set by both the call site and a pin is refused, in either spelling.
+    run _mf_args_with_pins demo --version v2
+    assert_failure
+    run _mf_args_with_pins demo --version=v2
+    assert_failure
+    run _mf_args_with_pins demo_eq --version v2
+    assert_failure
+}
+
+@test "mac-flywheel: install and update both apply argument pins" {
+    run grep -F 'acfs_installer_args_with_pins "$tool" "$@"' "$PROJECT_ROOT/install.sh"
+    assert_success
+    local fn
+    fn="$(sed -n '/^update_run_verified_installer_with_env() {$/,/^}/p' "$PROJECT_ROOT/scripts/lib/update.sh")"
+    [[ "$fn" == *'acfs_installer_args_with_pins "$tool" "$@"'* ]] || fail "update doesn't apply argument pins"
+    [[ "${fn%%acfs_installer_args_with_pins*}" == *update_require_security* ]] || fail "update applies pins before security.sh is loaded"
+}
+
 @test "run_as_target_runner strips loader controls before its first external command" {
     local helpers="$PROJECT_ROOT/scripts/lib/install_helpers.sh"
 

@@ -947,10 +947,74 @@ declare -ga ACFS_SECURITY_REQUIRED_INSTALLERS=("${!KNOWN_INSTALLERS[@]}")
 # refresh time, so pins change only in a deliberate bring-to-current.
 #   br: run from stdin, its installer would exec main's install.sh instead of the verified bytes (br.sh:62-92).
 #   ru: its self-refresh can't fire under bash 5.2 today; pinned off anyway so it can't start to.
+#   asb, giil: version pins; their installers take the version only from the environment.
 declare -gA ACFS_INSTALLER_PIN_ENV=(
     [br]="BR_INSTALLER_SELF_REEXEC=1"
     [ru]="RU_INSTALLER_NO_SELF_REFRESH=1"
+    [asb]="ASB_VERSION=v0.3.7"
+    [giil]="GIIL_VERSION=3.2.1"
 )
+
+# mac-flywheel local: per-installer ARGUMENT pins (phase 2 step 3), one argument per line, put BEFORE the call
+# site's own arguments (acfs_installer_args_with_pins), so an installer that stops parsing at a call site's `--`
+# still sees them. Each value is the version the last passing e2e (20261112-154404, pin df91579f) actually
+# installed: read from its `acfs doctor` output, or for tools doctor doesn't report, the newest release published
+# before that run started (2026-11-12 21:44 UTC). Syntax per tool is from reading each frozen installer:
+#   ntm, caam: only the `--version=vX` form pins; `--version vX` as two arguments is silently ignored.
+#   s2p: --verify too, or a missing release asset silently falls back to a source build.
+#   tru: v0.2.4, not the then-latest v0.2.5: the run had 0.2.4 (UBS installs its own pinned tru).
+#   pfr: no releases; pinned to the main commit current at that time.
+#   bun: its installer takes the release tag as its first argument.
+#   pcr: deliberately absent; its script embeds its version, and its --version exits without installing.
+declare -gA ACFS_INSTALLER_PIN_ARGS=(
+    [brenner_bot]=$'--version\nv0.4.1'
+    [bun]="bun-v1.4.4"
+    [caam]="--version=v0.1.25"
+    [cass]=$'--version\nv0.11.0'
+    [cm]=$'--version\nv0.5.1'
+    [csctf]=$'--version\nv0.4.6'
+    [dcg]=$'--version\nv0.16.0'
+    [dsr]=$'--version\nv0.2.3'
+    [ee]=$'--version\nv0.18.0'
+    [ms]=$'--version\nv0.3.0'
+    [ntm]="--version=v1.38.0"
+    [opencode]=$'--version\n1.19.5'
+    [pfr]=$'--ref\nfa4439e1ccfa67c81e7ae09b004bcf55c338db2b'
+    [rano]=$'--version\nv0.2.1'
+    [s2p]=$'--version\nv0.3.4\n--verify'
+    [tru]=$'--version\nv0.2.4'
+)
+
+# acfs_installer_args_with_pins <tool> [call-site args...]: prints the tool's pinned arguments followed by the
+# call site's, each terminated by NUL (so empty arguments and spaces survive). Fails when a flag the call site
+# passes is also pinned (compared by name, with or without `=value`).
+acfs_installer_args_with_pins() {
+    local tool="${1:-}" pinned="" arg="" name=""
+    shift || true
+    local -a pins=()
+    pinned="${ACFS_INSTALLER_PIN_ARGS[$tool]:-}"
+    if [[ -n "$pinned" ]]; then
+        while IFS= read -r arg; do
+            [[ -n "$arg" ]] && pins+=("$arg")
+        done <<< "$pinned"
+    fi
+    local pinned_names=":"
+    for arg in "${pins[@]}"; do
+        if [[ "$arg" == -* ]]; then pinned_names+="${arg%%=*}:"; fi
+    done
+    for arg in "$@"; do
+        if [[ "$arg" == -?* && "$arg" != "--" ]]; then
+            name="${arg%%=*}"
+            if [[ "$pinned_names" == *":$name:"* ]]; then
+                printf 'The %s installer gets %s from both its call site and its pin\n' "$tool" "$name" >&2
+                return 1
+            fi
+        fi
+    done
+    for arg in "${pins[@]}" "$@"; do
+        printf '%s\0' "$arg"
+    done
+}
 
 # acfs_installer_pin_env <tool>: the tool's pinned assignments, one per line (nothing when it has none).
 acfs_installer_pin_env() {

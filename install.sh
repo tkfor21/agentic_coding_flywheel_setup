@@ -6418,6 +6418,20 @@ acfs_run_verified_upstream_script_as_target_with_env() {
     while IFS= read -r runner_env_line; do
         [[ -z "$runner_env_line" ]] || runner_env_assignments+=("$runner_env_line")
     done <<< "$runner_env_lines"
+    # mac-flywheel local: the tool's pinned arguments (security.sh ACFS_INSTALLER_PIN_ARGS) go before the call
+    # site's. A flag set by both is refused.
+    if declare -F acfs_installer_args_with_pins >/dev/null 2>&1; then
+        if ! acfs_installer_args_with_pins "$tool" "$@" >/dev/null; then
+            ACFS_LAST_MODULE_FAILURE_REASON="environment setup"
+            return 1
+        fi
+        local -a runner_args=()
+        local runner_arg=""
+        while IFS= read -r -d '' runner_arg; do
+            runner_args+=("$runner_arg")
+        done < <(acfs_installer_args_with_pins "$tool" "$@")
+        set -- "${runner_args[@]}"
+    fi
 
     local staged_installer=""
 

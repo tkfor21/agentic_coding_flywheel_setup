@@ -6740,6 +6740,16 @@ update_run_verified_installer_with_env() {
 
     # mac-flywheel local: the tool's pinned assignments (security.sh, loaded just above) join the call site's.
     bash_env_assignment="$(update_installer_env_with_pins "$tool" "$bash_env_assignment")" || return 1
+    # mac-flywheel local: and its pinned arguments (security.sh ACFS_INSTALLER_PIN_ARGS) go before the call site's.
+    if declare -F acfs_installer_args_with_pins >/dev/null 2>&1; then
+        acfs_installer_args_with_pins "$tool" "$@" >/dev/null || return 1
+        local -a pinned_installer_args=()
+        local pinned_installer_arg=""
+        while IFS= read -r -d '' pinned_installer_arg; do
+            pinned_installer_args+=("$pinned_installer_arg")
+        done < <(acfs_installer_args_with_pins "$tool" "$@")
+        set -- "${pinned_installer_args[@]}"
+    fi
 
     if [[ -n "$bash_env_assignment" ]]; then
         local env_assignment=""
