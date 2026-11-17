@@ -392,36 +392,8 @@ ensure_gum_installed() {
         return 0
     fi
 
-    gum_detail "Installing gum for enhanced UI..."
-
-    local sudo_cmd=""
-    if [[ $EUID -ne 0 ]]; then
-        if command -v sudo &>/dev/null; then
-            sudo_cmd="sudo"
-        else
-            gum_warn "sudo not found, trying installation without it..."
-        fi
-    fi
-
-    # Try different installation methods
-    if command -v brew &>/dev/null; then
-        brew install gum
-    elif command -v apt-get &>/dev/null; then
-        # Add charm repository (DEB822 format for Ubuntu 24.04+)
-        $sudo_cmd mkdir -p /etc/apt/keyrings
-        curl --proto '=https' --proto-redir '=https' -fsSL https://repo.charm.sh/apt/gpg.key | $sudo_cmd gpg --batch --yes --dearmor -o /etc/apt/keyrings/charm.gpg
-        printf 'Types: deb\nURIs: https://repo.charm.sh/apt/\nSuites: *\nComponents: *\nSigned-By: /etc/apt/keyrings/charm.gpg\n' | $sudo_cmd tee /etc/apt/sources.list.d/charm.sources > /dev/null
-        $sudo_cmd apt-get -o DPkg::Lock::Timeout=120 update && \
-            $sudo_cmd apt-get -o DPkg::Lock::Timeout=120 install -y gum
-    elif command -v go &>/dev/null; then
-        go install github.com/charmbracelet/gum@latest
-    else
-        gum_warn "Could not install gum automatically. Install manually: https://github.com/charmbracelet/gum"
-        return 1
-    fi
-
-    if command -v gum &>/dev/null; then
-        HAS_GUM=true
-        gum_success "gum installed successfully"
-    fi
+    # mac-flywheel local (#77): no install here. Upstream's methods (brew, Charm's apt repository, `go install ...@latest`)
+    # all take the newest gum; ACFS installs its one pinned gum in install.sh (acfs_install_pinned_gum_deb).
+    gum_warn "gum is not installed. Re-run the ACFS installer, which installs its pinned gum (v2.0.2)."
+    return 1
 }

@@ -57,6 +57,7 @@ EOF
 }
 
 @test "installer: gum outer timeout leaves time to operate after lock acquisition" {
+    skip "mac-flywheel #77: install_gum_early installs nothing, so it never runs apt"
     local timeout_log="$BATS_TEST_TMPDIR/gum_timeout_calls.log"
     local apt_log="$BATS_TEST_TMPDIR/gum_apt_calls.log"
     local fake_bin="$BATS_TEST_TMPDIR/gum_bin"

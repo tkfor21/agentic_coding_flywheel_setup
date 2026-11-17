@@ -310,6 +310,9 @@ class InstallerTerminalTests(unittest.TestCase):
             setsid_available=True, sleep_available=True, mktemp_available=True,
             detached=False, interrupt_signal=None, pid_only=False, monitor_mode=False,
             parent_kill_fails=False):
+        # mac-flywheel local (#77): install_gum_early installs nothing (no Charm apt repository, no early apt), so
+        # upstream's early-bootstrap apt scenarios don't apply. tests/unit/lib/test_install_helpers.bats covers it.
+        self.skipTest("mac-flywheel #77: no early gum bootstrap")
         function_source = definition("install_gum_early")
         helpers = []
         for helper in ("acfs_run_early_apt", "acfs_wait_early_apt"):

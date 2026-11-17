@@ -1311,6 +1311,77 @@ _mf_pinned_ast_grep() { sed -n 's/^ACFS_AST_GREP_PINNED_VERSION="\(.*\)"$/\1/p' 
     done
 }
 
+# mac-flywheel local (#77): gum is gum's v2.0.2 release .deb, checked against its sha256 (GitHub's recorded asset
+# digests), never Charm's apt repository, which serves its newest gum to every install. Joel, 2026-11-17: the installer's
+# early bootstrap installs no gum; cli.modern installs the pinned one.
+@test "mac-flywheel: install_gum_early installs nothing" {
+    local log="$BATS_TEST_TMPDIR/early.log"
+    : > "$log"
+    eval "$(sed -n '/^install_gum_early() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    declare -F install_gum_early >/dev/null || fail "install_gum_early not found in install.sh"
+    acfs_early_system_binary_path() { [[ "$1" == gum ]] && return 1; echo "$1" >> "$log"; printf '/bin/false\n'; }
+    acfs_early_sudo_binary_path() { echo sudo >> "$log"; printf '/bin/false\n'; }
+    _acfs_os_release_field() { printf '24.04\n'; }
+    ACFS_DISTRO_FAMILY=ubuntu DRY_RUN=false PRINT_MODE=false HAS_GUM=false
+    install_gum_early
+    [[ "$HAS_GUM" == false ]] || fail "HAS_GUM changed"
+    [[ ! -s "$log" ]] || fail "install_gum_early looked up tools to install gum: $(cat "$log")"
+}
+
+_mf_load_pinned_gum() {
+    eval "$(sed -n '/^acfs_install_pinned_gum_deb() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    declare -F acfs_install_pinned_gum_deb >/dev/null || fail "acfs_install_pinned_gum_deb not found in install.sh"
+    GUM_LOG="$BATS_TEST_TMPDIR/gum.log"
+    : > "$GUM_LOG"
+    SUDO=""
+    log_detail() { :; }
+    log_warn() { echo "warn $*" >> "$GUM_LOG"; }
+    acfs_early_system_binary_path() { command -v "$1"; }
+    acfs_download_file_and_verify_sha256() { echo "download $1 $3" >> "$GUM_LOG"; : > "$2"; }
+    apt-get() { echo "apt-get $*" >> "$GUM_LOG"; }
+}
+
+@test "mac-flywheel: acfs_install_pinned_gum_deb installs gum v2.0.2's release .deb for arm64 and amd64 by sha256" {
+    _mf_load_pinned_gum
+    dpkg() { printf 'arm64\n'; }
+    run acfs_install_pinned_gum_deb
+    assert_success
+    grep -qx 'download https://github.com/charmbracelet/gum/releases/download/v2.0.2/gum_2.0.2_arm64.deb 1e15dd7f82ee175cdd850c674f8c7025c16b263ffc13a3fb5142518e0445dfb7' "$GUM_LOG" \
+        || fail "arm64 not pinned: $(cat "$GUM_LOG")"
+    grep -qE '^apt-get -o DPkg::Lock::Timeout=120 install -y /.*/gum_2\.0\.2_arm64\.deb$' "$GUM_LOG" || fail "not installed from the .deb: $(cat "$GUM_LOG")"
+    : > "$GUM_LOG"
+    dpkg() { printf 'amd64\n'; }
+    run acfs_install_pinned_gum_deb
+    assert_success
+    grep -qx 'download https://github.com/charmbracelet/gum/releases/download/v2.0.2/gum_2.0.2_amd64.deb 9aad8600d9d280d91544439f35db4c9583cc0201bb718ac6afcc0f4989ea945b' "$GUM_LOG" \
+        || fail "amd64 not pinned: $(cat "$GUM_LOG")"
+}
+
+@test "mac-flywheel: acfs_install_pinned_gum_deb installs nothing on another architecture or a failed download" {
+    _mf_load_pinned_gum
+    dpkg() { printf 'riscv64\n'; }
+    run acfs_install_pinned_gum_deb
+    assert_failure
+    ! grep -qE '^(download|apt-get)' "$GUM_LOG" || fail "acted on riscv64: $(cat "$GUM_LOG")"
+    dpkg() { printf 'arm64\n'; }
+    acfs_download_file_and_verify_sha256() { echo "download $1 $3" >> "$GUM_LOG"; return 1; }
+    run acfs_install_pinned_gum_deb
+    assert_failure
+    ! grep -q '^apt-get' "$GUM_LOG" || fail "installed after a failed download: $(cat "$GUM_LOG")"
+}
+
+@test "mac-flywheel: nothing installs gum from Charm's apt repository or the newest gum" {
+    local f body
+    for f in "$PROJECT_ROOT/install.sh" "$PROJECT_ROOT"/scripts/lib/*.sh "$PROJECT_ROOT"/scripts/generated/*.sh "$PROJECT_ROOT/acfs.manifest.yaml"; do
+        run grep -nF 'repo.charm.sh' "$f"
+        assert_failure
+        run grep -nF 'charmbracelet/gum@latest' "$f"
+        assert_failure
+    done
+    body="$(sed -n '/^install_cli_tools_legacy_modern() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    grep -qF 'acfs_install_pinned_gum_deb' <<<"$body" || fail "cli.modern doesn't install the pinned gum"
+}
+
 # mac-flywheel local (#68): cli.modern's cargo tools and update's tealdeer are pinned to one exact release each
 # (security.sh ACFS_CARGO_CRATE_PINNED_VERSIONS; 2026-11-16: what acfs-local and the last e2e built, tealdeer from
 # crates.io). An unversioned `cargo install <crate>` builds the newest crate, and dropping --locked takes the newest deps.

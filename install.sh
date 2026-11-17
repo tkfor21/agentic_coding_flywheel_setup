@@ -1040,153 +1040,45 @@ install_gum_early() {
         return 0
     fi
 
-    # Respect dry-run / print-only modes: do not modify the system just to
-    # improve UI.
-    if [[ "${DRY_RUN:-false}" == "true" ]] || [[ "${PRINT_MODE:-false}" == "true" ]]; then
-        return 0
-    fi
+    # mac-flywheel local (#77; Joel, 2026-11-17): no early gum. Upstream added Charm's apt repository here (its key fetched
+    # live) and installed whatever gum that repository served. The installer prints plain output until cli.modern
+    # installs the pinned gum release (acfs_install_pinned_gum_deb).
+    return 0
+}
 
-    # Only attempt early gum install on Ubuntu systems (apt repo/key setup is
-    # Ubuntu-specific). Preflight/ensure_ubuntu will stop execution later on
-    # unsupported OS versions. Arch-family systems get gum via pacman in
-    # install_cli_tools.
-    if [[ "$ACFS_DISTRO_FAMILY" != "ubuntu" ]]; then
-        return 0
-    fi
-    local version_id=""
-    version_id="$(_acfs_os_release_field VERSION_ID)"
-    local version_major="${version_id%%.*}"
-    if [[ -z "$version_id" ]] || [[ "$version_major" -lt 22 ]]; then
-        return 0
-    fi
-
-    local curl_bin=""
-    local gpg_bin=""
-    local apt_get_bin=""
-    local timeout_bin=""
-    local setsid_bin=""
-    local env_bin=""
-    local bash_bin=""
-    local sleep_bin=""
-    local mktemp_bin=""
-    local rm_bin=""
-    local mkdir_bin=""
-    local tee_bin=""
-
-    # Need curl to fetch gum - if curl isn't installed yet, skip early install
-    # (gum will be installed later in install_cli_tools after ensure_base_deps)
-    curl_bin="$(acfs_early_system_binary_path curl 2>/dev/null || true)"
-    if [[ -z "$curl_bin" ]]; then
-        return 0
-    fi
-
-    # Need gpg for apt key handling
-    gpg_bin="$(acfs_early_system_binary_path gpg 2>/dev/null || true)"
-    if [[ -z "$gpg_bin" ]]; then
-        return 0
-    fi
-
-    # Need apt-get for installation
-    apt_get_bin="$(acfs_early_system_binary_path apt-get 2>/dev/null || true)"
-    if [[ -z "$apt_get_bin" ]]; then
-        return 0
-    fi
-    timeout_bin="$(acfs_early_system_binary_path timeout 2>/dev/null || true)"
-    if [[ -z "$timeout_bin" ]]; then
-        return 0
-    fi
-    setsid_bin="$(acfs_early_system_binary_path setsid 2>/dev/null || true)"
-    env_bin="$(acfs_early_system_binary_path env 2>/dev/null || true)"
-    bash_bin="$(acfs_early_system_binary_path bash 2>/dev/null || true)"
-    sleep_bin="$(acfs_early_system_binary_path sleep 2>/dev/null || true)"
+# mac-flywheel local (#77): the ONE gum ACFS installs, gum's v2.0.2 release .deb (gum's newest release, 2026-09-24; the
+# same /usr/bin/gum bytes Charm's apt repository installed on acfs-local). The sha256 values are GitHub's recorded asset
+# digests, checked again against the downloaded files on 2026-11-17. Only arm64 and amd64 are published as .deb; any
+# other architecture gets no gum (it is optional UI). The .deb has no dependencies.
+acfs_install_pinned_gum_deb() {
+    local gum_ver="2.0.2" gum_arch="" gum_sha256="" dpkg_bin="" mktemp_bin="" gum_dir="" gum_deb="" rc=1
+    dpkg_bin="$(acfs_early_system_binary_path dpkg 2>/dev/null || true)"
+    [[ -n "$dpkg_bin" ]] || return 1
+    gum_arch="$("$dpkg_bin" --print-architecture 2>/dev/null || true)"
+    case "$gum_arch" in
+        arm64) gum_sha256="1e15dd7f82ee175cdd850c674f8c7025c16b263ffc13a3fb5142518e0445dfb7" ;;
+        amd64) gum_sha256="9aad8600d9d280d91544439f35db4c9583cc0201bb718ac6afcc0f4989ea945b" ;;
+        *)
+            log_detail "gum: no pinned release .deb for architecture '${gum_arch:-unknown}' (optional, skipping)"
+            return 1
+            ;;
+    esac
     mktemp_bin="$(acfs_early_system_binary_path mktemp 2>/dev/null || true)"
-    rm_bin="$(acfs_early_system_binary_path rm 2>/dev/null || true)"
-    if [[ -z "$setsid_bin" || -z "$env_bin" || -z "$bash_bin" || -z "$sleep_bin" \
-        || -z "$mktemp_bin" || -z "$rm_bin" ]]; then
-        return 0
-    fi
-    mkdir_bin="$(acfs_early_system_binary_path mkdir 2>/dev/null || true)"
-    tee_bin="$(acfs_early_system_binary_path tee 2>/dev/null || true)"
-    if [[ -z "$mkdir_bin" || -z "$tee_bin" ]]; then
-        return 0
-    fi
-
-    # Need root/sudo for apt operations
-    local -a sudo_cmd=()
-    local sudo_bin=""
-    if [[ $EUID -ne 0 ]]; then
-        sudo_bin="$(acfs_early_sudo_binary_path 2>/dev/null || true)"
-        if [[ -n "$sudo_bin" ]]; then
-            sudo_cmd=("$sudo_bin")
+    [[ -n "$mktemp_bin" ]] || return 1
+    gum_dir="$("$mktemp_bin" -d "${TMPDIR:-/tmp}/acfs-gum.XXXXXX" 2>/dev/null)" || return 1
+    # apt-get installs a local package only by a path ending in .deb.
+    gum_deb="$gum_dir/gum_${gum_ver}_${gum_arch}.deb"
+    if acfs_download_file_and_verify_sha256 \
+        "https://github.com/charmbracelet/gum/releases/download/v${gum_ver}/gum_${gum_ver}_${gum_arch}.deb" \
+        "$gum_deb" "$gum_sha256" "gum ${gum_ver} (${gum_arch})"; then
+        if $SUDO apt-get -o DPkg::Lock::Timeout=120 install -y "$gum_deb"; then
+            rc=0
         else
-            # Can't install gum without sudo, fall back to plain output
-            return 0
+            log_warn "gum: installing the verified gum ${gum_ver} .deb failed (optional, continuing)"
         fi
     fi
-
-    local apt_runner=""
-    apt_runner="$(declare -f acfs_run_early_apt)"
-    apt_runner+=$'\nacfs_run_early_apt "$@"'
-
-    echo -e "\033[0;90m    → Installing gum for enhanced UI...\033[0m" >&2
-
-    # Step 1: Fetch Charm GPG key (with timeout)
-    echo -e "\033[0;90m      ↳ Fetching Charm repository key...\033[0m" >&2
-    "${sudo_cmd[@]}" "$mkdir_bin" -p /etc/apt/keyrings 2>/dev/null || true
-    if ! "$curl_bin" "${ACFS_EARLY_CURL_ARGS[@]}" --connect-timeout 10 --max-time 30 \
-        https://repo.charm.sh/apt/gpg.key 2>/dev/null | \
-        "${sudo_cmd[@]}" "$gpg_bin" --batch --yes --dearmor -o /etc/apt/keyrings/charm.gpg 2>/dev/null; then
-        echo -e "\033[0;33m      ⚠ Could not fetch Charm key (skipping gum, will retry later)\033[0m" >&2
-        return 0
-    fi
-
-    # Step 2: Add apt repository (using DEB822 format to avoid .migrate warnings on upgrade)
-    "${sudo_cmd[@]}" "$tee_bin" /etc/apt/sources.list.d/charm.sources > /dev/null 2>&1 << 'EOF'
-Types: deb
-URIs: https://repo.charm.sh/apt/
-Suites: *
-Components: *
-Signed-By: /etc/apt/keyrings/charm.gpg
-EOF
-
-    # Step 3: Update apt (this can be slow on fresh systems)
-    # Detach noninteractive apt from the controlling TTY to prevent SIGTTOU
-    # stops. Keep ordinary timeout inside that session so its process-group
-    # signal also reaches dpkg/helpers retaining the captured output pipe.
-    # The foreground supervisor forwards terminal cancellation to that group.
-    # sudo stays outside setsid: it may need the caller's terminal to prompt
-    # or use cached credentials (#475). Set DEBIAN_FRONTEND after sudo, and
-    # use privileged Bash mode to ignore startup files and imported functions.
-    echo -e "\033[0;90m      ↳ Updating package lists (may take 30-60s on fresh systems)...\033[0m" >&2
-    if ! acfs_wait_early_apt "" "$mktemp_bin" "$rm_bin" \
-        "${sudo_cmd[@]}" "$env_bin" DEBIAN_FRONTEND=noninteractive "$bash_bin" -p -c "$apt_runner" \
-        acfs-early-apt "$setsid_bin" "$timeout_bin" "$bash_bin" "$sleep_bin" "$apt_get_bin" \
-        -o DPkg::Lock::Timeout=120 update -y -o Dpkg::Progress-Fancy="0" -o APT::Color="0"; then
-        # Reset terminal line position in case apt left cursor in bad state
-        echo -e "\r\033[K\033[0;33m      ⚠ apt-get update slow/failed (skipping gum, will retry later)\033[0m" >&2
-        return 0
-    fi
-
-    # Step 4: Install gum
-    # Use DEBIAN_FRONTEND=noninteractive and disable fancy progress to prevent
-    # terminal cursor position issues when apt-get fails or times out
-    echo -e "\033[0;90m      ↳ Installing gum package...\033[0m" >&2
-    local apt_output
-    if acfs_wait_early_apt apt_output "$mktemp_bin" "$rm_bin" \
-        "${sudo_cmd[@]}" "$env_bin" DEBIAN_FRONTEND=noninteractive "$bash_bin" -p -c "$apt_runner" \
-        acfs-early-apt "$setsid_bin" "$timeout_bin" "$bash_bin" "$sleep_bin" "$apt_get_bin" \
-        -o DPkg::Lock::Timeout=120 install -y -o Dpkg::Progress-Fancy="0" -o APT::Color="0" gum; then
-        HAS_GUM=true
-        # Reset terminal line position and show success
-        echo -e "\r\033[K\033[0;32m    ✓ gum installed - enhanced UI enabled!\033[0m" >&2
-    else
-        # Reset terminal line position in case apt left cursor in bad state
-        echo -e "\r\033[K\033[0;33m      ⚠ gum install failed (continuing without enhanced UI)\033[0m" >&2
-        # Show brief reason if available (e.g., "Unable to locate package", timeout, etc.)
-        if echo "$apt_output" | grep -qi "unable to locate\|not found\|timeout"; then
-            echo -e "\033[0;90m        (Charm repository may be unavailable or package not found)\033[0m" >&2
-        fi
-    fi
+    rm -rf "$gum_dir" 2>/dev/null || true
+    return "$rc"
 }
 
 # ============================================================
@@ -8659,12 +8551,10 @@ install_cli_tools_legacy_modern() {
             log_detail "gum installation failed (optional, continuing)"
         fi
     else
+        # mac-flywheel local (#77): gum's pinned release .deb, verified by sha256, instead of the newest gum from
+        # Charm's apt repository.
         log_detail "Installing gum for glamorous shell scripts"
-        try_step_optional "Creating apt keyrings directory" $SUDO mkdir -p /etc/apt/keyrings || true
-        try_step_optional "Adding Charm apt key" try_step_eval "Adding Charm apt key" "set -o pipefail; if curl --help all 2>/dev/null | grep -q -- '--proto'; then curl --proto '=https' --proto-redir '=https' -fsSL https://repo.charm.sh/apt/gpg.key; else curl -fsSL https://repo.charm.sh/apt/gpg.key; fi | $SUDO gpg --batch --yes --dearmor -o /etc/apt/keyrings/charm.gpg 2>/dev/null" || true
-        try_step_optional "Adding Charm apt repo" try_step_eval "Adding Charm apt repo" "printf 'Types: deb\nURIs: https://repo.charm.sh/apt/\nSuites: *\nComponents: *\nSigned-By: /etc/apt/keyrings/charm.gpg\n' | $SUDO tee /etc/apt/sources.list.d/charm.sources > /dev/null" || true
-        try_step_optional "Updating apt cache" $SUDO apt-get -o DPkg::Lock::Timeout=120 update -y || true
-        if try_step_optional "Installing gum" $SUDO apt-get -o DPkg::Lock::Timeout=120 install -y gum 2>/dev/null; then
+        if try_step_optional "Installing gum 2.0.2" acfs_install_pinned_gum_deb; then
             HAS_GUM=true
             log_success "gum installed - enhanced UI now available"
         else
