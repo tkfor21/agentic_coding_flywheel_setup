@@ -312,3 +312,49 @@ network_hints() {
     run grep -E 'apt-get|enable --now ssh"' <<<"$body"
     [ "$status" -eq 1 ]
 }
+
+# ============================================================
+# mac-flywheel local (#69): tool.sg checks ACFS's cargo ast-grep
+# ============================================================
+
+# Ubuntu's login package ships /usr/bin/sg (newgrp). Resolving `sg` lets that pass the check with ast-grep missing.
+# check_acfs_ast_grep reads only ~/.cargo/bin/ast-grep, where tools.ast_grep installs.
+acfs_ast_grep_check() {
+    load_doctor_functions
+    doctor_skip_unselected_check() { return 1; }
+    doctor_runtime_home() { printf '%s\n' "$HOME"; }
+    get_version_line() { "$1" --version; }
+    fix_for_module() { printf 'module:%s' "$1"; }
+    check() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "${5:-}"; }
+    check_acfs_ast_grep
+}
+
+@test "doctor tool.sg fails when ~/.cargo/bin/ast-grep is missing, whatever sg is on PATH (#69)" {
+    export HOME="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$HOME/.local/bin"
+    printf '#!/bin/bash\necho "Usage: sg group [[-c] command]"\n' > "$HOME/.local/bin/sg"
+    chmod +x "$HOME/.local/bin/sg"
+    PATH="$HOME/.local/bin:$PATH" run acfs_ast_grep_check
+    assert_success
+    assert_output --partial "tool.sg|ast-grep|fail|"
+    assert_output --partial "module:tools.ast_grep"
+}
+
+@test "doctor tool.sg passes with ACFS's cargo ast-grep and reports its version (#69)" {
+    export HOME="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$HOME/.cargo/bin"
+    printf '#!/bin/bash\necho "ast-grep 0.51.2"\n' > "$HOME/.cargo/bin/ast-grep"
+    chmod +x "$HOME/.cargo/bin/ast-grep"
+    run acfs_ast_grep_check
+    assert_success
+    assert_output --partial "tool.sg|ast-grep (ast-grep 0.51.2)|pass|installed"
+}
+
+@test "check_core_tools checks ast-grep with check_acfs_ast_grep, not a PATH lookup of sg (#69)" {
+    local body=""
+    body="$(sed -n '/^check_core_tools() {$/,/^}$/p' "$DOCTOR_SH")"
+    [[ -n "$body" ]] || fail "check_core_tools not found"
+    [[ "$body" == *check_acfs_ast_grep* ]] || fail "check_core_tools doesn't call check_acfs_ast_grep"
+    run grep -F 'check_command "tool.sg"' <<<"$body"
+    [ "$status" -eq 1 ]
+}

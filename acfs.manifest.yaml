@@ -884,9 +884,11 @@ modules:
     tags: [recommended]
     dependencies:
       - lang.rust
+    # mac-flywheel local (#69): ACFS's cargo build, never a PATH lookup of sg. Ubuntu's login package ships
+    # /usr/bin/sg (newgrp), so such a probe is true on every Ubuntu system.
     installed_check:
       run_as: target_user
-      command: "command -v sg"
+      command: "test -x ~/.cargo/bin/ast-grep"
     install:
       # mac-flywheel local: security.sh ACFS_AST_GREP_PINNED_VERSION, an exact release; keep them equal.
       - ~/.cargo/bin/cargo install ast-grep --version 0.51.2 --locked

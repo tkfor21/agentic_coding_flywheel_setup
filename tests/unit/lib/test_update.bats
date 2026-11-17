@@ -1451,6 +1451,46 @@ EOF
     ! grep -E "install ast-grep --locked" "$log_file" || fail "ast-grep installed without a version"
 }
 
+# mac-flywheel local (#69): ACFS's ast-grep is cargo's ~/.cargo/bin/sg. Any other sg (Ubuntu's /usr/bin/sg is newgrp)
+# is not ast-grep, so it neither counts as installed nor gets "updated".
+@test "update_binary_exists sg: only cargo's sg counts, never an sg elsewhere" {
+    unset CARGO_HOME
+    mkdir -p "$HOME/.local/bin" "$HOME/bin"
+    printf '#!/bin/bash\necho "Usage: sg group [[-c] command]"\n' > "$HOME/bin/sg"
+    cp "$HOME/bin/sg" "$HOME/.local/bin/sg"
+    chmod +x "$HOME/bin/sg" "$HOME/.local/bin/sg"
+    run update_binary_exists sg
+    assert_failure
+
+    mkdir -p "$HOME/.cargo/bin"
+    printf '#!/bin/bash\necho "ast-grep 0.51.2"\n' > "$HOME/.cargo/bin/sg"
+    chmod +x "$HOME/.cargo/bin/sg"
+    run update_binary_exists sg
+    assert_success
+    run update_rust_binary_path sg
+    assert_output "$HOME/.cargo/bin/sg"
+}
+
+@test "update_cargo_tools: an sg outside ~/.cargo/bin doesn't make update install ast-grep" {
+    unset CARGO_HOME
+    mkdir -p "$HOME/.cargo/bin" "$HOME/.local/bin"
+    local log_file="$HOME/cargo.log"
+    cat > "$HOME/.cargo/bin/cargo" <<EOF
+#!/bin/bash
+echo "\$@" >> "$log_file"
+EOF
+    chmod +x "$HOME/.cargo/bin/cargo"
+    printf '#!/bin/bash\necho "Usage: sg group [[-c] command]"\n' > "$HOME/.local/bin/sg"
+    chmod +x "$HOME/.local/bin/sg"
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    export ACFS_AST_GREP_PINNED_VERSION="0.51.2"
+
+    UPDATE_RUNTIME=true
+    run update_cargo_tools
+    assert_success
+    ! grep -F "install ast-grep" "$log_file" 2>/dev/null || fail "ast-grep installed for a foreign sg: $(cat "$log_file")"
+}
+
 # mac-flywheel local (#68): lsd, du-dust and tealdeer each have one pinned release (security.sh
 # ACFS_CARGO_CRATE_PINNED_VERSIONS).
 @test "update_pinned_cargo_crate_version: refuses unpinned crates, prereleases and partial versions" {

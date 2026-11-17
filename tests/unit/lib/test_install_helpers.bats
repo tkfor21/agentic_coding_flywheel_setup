@@ -1297,6 +1297,20 @@ _mf_pinned_ast_grep() { sed -n 's/^ACFS_AST_GREP_PINNED_VERSION="\(.*\)"$/\1/p' 
     done
 }
 
+# mac-flywheel local (#69): Ubuntu's login package ships /usr/bin/sg (newgrp), so a PATH probe for that name is always
+# true there. tools.ast_grep is installed when ACFS's cargo build is.
+@test "mac-flywheel: tools.ast_grep's installed_check looks for ~/.cargo/bin/ast-grep, not sg on PATH" {
+    local f
+    run grep -F 'command: "test -x ~/.cargo/bin/ast-grep"' "$PROJECT_ROOT/acfs.manifest.yaml"
+    assert_success
+    run grep -F "['tools.ast_grep']='test -x ~/.cargo/bin/ast-grep'" "$PROJECT_ROOT/scripts/generated/manifest_index.sh"
+    assert_success
+    for f in "$PROJECT_ROOT/acfs.manifest.yaml" "$PROJECT_ROOT"/scripts/generated/*.sh; do
+        run grep -E 'command -v sg\b' "$f"
+        assert_failure
+    done
+}
+
 # mac-flywheel local (#68): cli.modern's cargo tools and update's tealdeer are pinned to one exact release each
 # (security.sh ACFS_CARGO_CRATE_PINNED_VERSIONS; 2026-11-16: what acfs-local and the last e2e built, tealdeer from
 # crates.io). An unversioned `cargo install <crate>` builds the newest crate, and dropping --locked takes the newest deps.

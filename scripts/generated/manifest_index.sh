@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="dd794755b51d018596301afc257eac27724132892e595b3c9fd3af9cec42ac38"
+ACFS_MANIFEST_SHA256="8a4948c2ded3c5ac7fe03cd7452dc5263ba53fc421e44a191488507dcc49a419"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -750,7 +750,7 @@ grep -qE '\''^ClientAliveInterval[[:space:]]+[1-9]'\'' /etc/ssh/sshd_config 2>/d
   ['lang.nvm']='test -x ~/.nvm/versions/node/v26.13.1/bin/node'
   ['tools.atuin']='test -x ~/.atuin/bin/atuin && test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin" && grep -Fq "agent hook integration disabled by ACFS" "${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin"'
   ['tools.zoxide']='command -v zoxide'
-  ['tools.ast_grep']='command -v sg'
+  ['tools.ast_grep']='test -x ~/.cargo/bin/ast-grep'
   ['agents.claude']='test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/claude" || test -x "$HOME/.local/bin/claude"'
   ['agents.codex']='test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/codex" || test -x "$HOME/.local/bin/codex"'
   ['agents.gemini']='test -x "${ACFS_BIN_DIR:-$HOME/.local/bin}/gemini" || test -x "$HOME/.local/bin/gemini"'

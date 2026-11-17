@@ -3309,6 +3309,18 @@ update_rust_binary_path() {
             return 0
         fi
     fi
+    # mac-flywheel local (#69): ast-grep's sg is cargo's or nothing. The general lookup below also searches ~/.local/bin
+    # and the system directories, where Ubuntu's login package ships an unrelated /usr/bin/sg (newgrp).
+    if [[ "$tool" == sg ]]; then
+        local target_home=""
+        target_home="$(update_target_home "$target_user" 2>/dev/null || true)"
+        if [[ -z "$target_home" && "$target_user" == "$current_user" && "${HOME:-}" == /* && "$HOME" != / ]]; then
+            target_home="${HOME%/}"
+        fi
+        [[ -n "$target_home" && -x "$target_home/.cargo/bin/sg" && ! -d "$target_home/.cargo/bin/sg" ]] || return 1
+        printf '%s\n' "$target_home/.cargo/bin/sg"
+        return 0
+    fi
     update_binary_path "$tool"
 }
 

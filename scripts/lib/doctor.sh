@@ -3359,9 +3359,28 @@ check_core_tools() {
     check_command "tool.minisign" "minisign (Agent Mail/CAAM release verification)" "minisign" "$(doctor_pkg_install_hint minisign)"
     check_command "tool.dig" "dig (dnsutils)" "dig" "$(doctor_pkg_install_hint dnsutils bind)"
     check_command "tool.nc" "nc (netcat-openbsd)" "nc" "$(doctor_pkg_install_hint netcat-openbsd openbsd-netcat)"
-    check_command "tool.sg" "ast-grep" "sg" "cargo install ast-grep --locked"
+    check_acfs_ast_grep
 
     blank_line
+}
+
+# mac-flywheel local (#69): tools.ast_grep is the cargo build in ~/.cargo/bin. A PATH lookup of `sg` (upstream's
+# check_command "tool.sg" ... "sg") passes on Ubuntu with ast-grep missing, because the login package ships /usr/bin/sg
+# (newgrp). The fix hint reinstalls the module, which builds the pinned release; `cargo install ast-grep` would build
+# the newest.
+check_acfs_ast_grep() {
+    local id="tool.sg" label="ast-grep" runtime_home="" bin="" version=""
+
+    doctor_skip_unselected_check "$id" "$label" && return 0
+
+    runtime_home="$(doctor_runtime_home)"
+    [[ -n "$runtime_home" ]] && bin="$runtime_home/.cargo/bin/ast-grep"
+    if [[ -n "$bin" && -x "$bin" && ! -d "$bin" ]]; then
+        version=$(get_version_line "$bin")
+        check "$id" "$label ($version)" "pass" "installed"
+    else
+        check "$id" "$label" "fail" "not found in ~/.cargo/bin" "$(fix_for_module tools.ast_grep)"
+    fi
 }
 
 # Check coding agents
