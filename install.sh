@@ -8913,6 +8913,20 @@ _acfs_pinned_ast_grep_version() {
     printf '%s\n' "$version"
 }
 
+# mac-flywheel local (#68): the one release of a cargo-built crate (security.sh ACFS_CARGO_CRATE_PINNED_VERSIONS).
+# Refuses a crate that isn't there and anything but a plain X.Y.Z, which `cargo install` would resolve to the newest.
+_acfs_pinned_cargo_crate_version() {
+    local crate="$1" version=""
+    if declare -p ACFS_CARGO_CRATE_PINNED_VERSIONS >/dev/null 2>&1; then
+        version="${ACFS_CARGO_CRATE_PINNED_VERSIONS[$crate]:-}"
+    fi
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Refusing $crate version '${version:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release"
+        return 1
+    fi
+    printf '%s\n' "$version"
+}
+
 # The pinned Node is installed (under ~/.nvm, or ~/.config/nvm when NVM_DIR was preset in the login environment, e.g. by
 # mise/omarchy dotfiles). Any other installed Node, such as a newer alpha, doesn't count.
 _target_has_nvm_node() {
@@ -9078,15 +9092,21 @@ install_languages_legacy_tools() {
     local tools_rc=0
 
     # Helper to install cargo tools with fallback
+    # mac-flywheel local (#68): exactly the pinned release (security.sh ACFS_CARGO_CRATE_PINNED_VERSIONS) with its own
+    # lockfile. Upstream retried without --locked, which re-resolves every dependency to the newest compatible release.
     _cargo_install() {
         local tool="$1"
         local bin_name="${2:-$1}"
+        local version=""
         if [[ ! -x "$TARGET_HOME/.cargo/bin/$bin_name" ]]; then
             if [[ -x "$cargo_bin" ]]; then
-                log_detail "Installing $tool via cargo"
-                if try_step_optional "Installing $tool via cargo" run_as_target "$cargo_bin" install "$tool" --locked 2>/dev/null || \
-                   try_step_optional "Installing $tool via cargo (no --locked)" run_as_target "$cargo_bin" install "$tool"; then
-                    log_success "$tool installed"
+                if ! version="$(_acfs_pinned_cargo_crate_version "$tool")"; then
+                    log_warn "Not installing $tool: no valid pinned version (optional)"
+                    return 0
+                fi
+                log_detail "Installing $tool $version via cargo"
+                if try_step_optional "Installing $tool $version via cargo" run_as_target "$cargo_bin" install "$tool" --version "$version" --locked; then
+                    log_success "$tool $version installed"
                 else
                     log_warn "Failed to install $tool (optional)"
                 fi
@@ -9126,6 +9146,8 @@ install_languages_legacy_tools() {
     if acfs_legacy_module_selected "cli.modern"; then
         # Batch downloads the index once and allows parallel compilation.
         local cargo_tools_needed=()
+        local cargo_specs=()
+        local version=""
         local -A cargo_bin_map=(
             ["du-dust"]="dust"
             ["lsd"]="lsd"
@@ -9138,16 +9160,22 @@ install_languages_legacy_tools() {
         for tool in du-dust lsd bat fd-find ripgrep; do
             local bin_name="${cargo_bin_map[$tool]}"
             if [[ ! -x "$TARGET_HOME/.cargo/bin/$bin_name" ]]; then
+                # mac-flywheel local (#68): crate@version, the pinned release; a crate without a valid pin is skipped.
+                if ! version="$(_acfs_pinned_cargo_crate_version "$tool")"; then
+                    log_warn "Not installing $tool: no valid pinned version (optional)"
+                    continue
+                fi
                 cargo_tools_needed+=("$tool")
+                cargo_specs+=("$tool@$version")
             fi
         done
 
         # Batch install if there are tools to install
         if [[ ${#cargo_tools_needed[@]} -gt 0 ]] && [[ -x "$cargo_bin" ]]; then
-            log_detail "Batch installing ${#cargo_tools_needed[@]} cargo tools: ${cargo_tools_needed[*]}"
-            if try_step_optional "Batch installing cargo tools" run_as_target "$cargo_bin" install "${cargo_tools_needed[@]}" --locked 2>/dev/null || \
-               try_step_optional "Batch installing cargo tools (no --locked)" run_as_target "$cargo_bin" install "${cargo_tools_needed[@]}"; then
-                log_success "Cargo tools batch installed: ${cargo_tools_needed[*]}"
+            log_detail "Batch installing ${#cargo_specs[@]} cargo tools: ${cargo_specs[*]}"
+            # mac-flywheel local (#68): --locked only; upstream's unlocked retry took the newest dependencies.
+            if try_step_optional "Batch installing cargo tools" run_as_target "$cargo_bin" install "${cargo_specs[@]}" --locked; then
+                log_success "Cargo tools batch installed: ${cargo_specs[*]}"
             else
                 # Fallback: install individually if batch fails
                 log_warn "Batch install failed, falling back to individual installs"

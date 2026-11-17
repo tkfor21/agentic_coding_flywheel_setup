@@ -1193,6 +1193,23 @@ update_pinned_ast_grep_version() {
     printf '%s\n' "$version"
 }
 
+# mac-flywheel local (#68), the `acfs update` twin of install.sh's _acfs_pinned_cargo_crate_version (security.sh
+# ACFS_CARGO_CRATE_PINNED_VERSIONS, loaded on demand). Refuses an unpinned crate and anything but a plain X.Y.Z.
+update_pinned_cargo_crate_version() {
+    local crate="$1" version=""
+    if ! declare -p ACFS_CARGO_CRATE_PINNED_VERSIONS >/dev/null 2>&1 && declare -F update_require_security >/dev/null 2>&1; then
+        update_require_security >/dev/null 2>&1 || true
+    fi
+    if declare -p ACFS_CARGO_CRATE_PINNED_VERSIONS >/dev/null 2>&1; then
+        version="${ACFS_CARGO_CRATE_PINNED_VERSIONS[$crate]:-}"
+    fi
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Refusing $crate version '${version:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release" >&2
+        return 1
+    fi
+    printf '%s\n' "$version"
+}
+
 # The pinned Node is installed. Any other installed Node, such as a newer alpha, doesn't count.
 update_has_nvm_node() {
     update_nvm_node_bin_dir >/dev/null
@@ -9836,8 +9853,11 @@ update_cargo_tools() {
             if [[ "$DRY_RUN" == "true" ]] && update_module_is_selected lang.rust \
                 && ! update_tool_hold_details rust; then
                 # update_rust previews the prerequisite without creating Cargo.
+                # mac-flywheel local (#68): preview the pinned release, as the real run installs it.
+                local ast_grep_preview=""
+                ast_grep_preview="$(update_pinned_ast_grep_version 2>/dev/null)" || ast_grep_preview="<no valid pin>"
                 run_cmd "Update ast-grep (after Rust installation)" \
-                    update_run_rust_in_target_context cargo install ast-grep --locked --force
+                    update_run_rust_in_target_context cargo install ast-grep --version "$ast_grep_preview" --locked
             else
                 log_item "fail" "Cargo tools" "cargo not found (required to repair ast-grep)"
             fi
@@ -9880,9 +9900,14 @@ update_cargo_tools() {
             fi
             run_cmd "Update $tool $ast_grep_version" update_run_rust_in_target_context "$cargo_bin" install "$tool" --version "$ast_grep_version" --locked
         else
-            # force is required to update existing install with cargo
-            # Use run_cmd to log and handle errors
-            run_cmd "Update $tool" update_run_rust_in_target_context "$cargo_bin" install "$tool" --locked --force
+            # mac-flywheel local (#68): the pinned release only (security.sh ACFS_CARGO_CRATE_PINNED_VERSIONS), with no
+            # --force for the same reason as ast-grep above. Upstream force-installed the newest crate.
+            local crate_version=""
+            if ! crate_version="$(update_pinned_cargo_crate_version "$tool")"; then
+                log_item "fail" "$tool" "no valid pinned version"
+                continue
+            fi
+            run_cmd "Update $tool $crate_version" update_run_rust_in_target_context "$cargo_bin" install "$tool" --version "$crate_version" --locked
         fi
 
         if capture_version_after "$binary_name"; then

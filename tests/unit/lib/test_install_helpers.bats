@@ -1297,6 +1297,54 @@ _mf_pinned_ast_grep() { sed -n 's/^ACFS_AST_GREP_PINNED_VERSION="\(.*\)"$/\1/p' 
     done
 }
 
+# mac-flywheel local (#68): cli.modern's cargo tools and update's tealdeer are pinned to one exact release each
+# (security.sh ACFS_CARGO_CRATE_PINNED_VERSIONS; 2026-11-16: what acfs-local and the last e2e built, tealdeer from
+# crates.io). An unversioned `cargo install <crate>` builds the newest crate, and dropping --locked takes the newest deps.
+_mf_cargo_crate_pin() {
+    sed -n "/^declare -gA ACFS_CARGO_CRATE_PINNED_VERSIONS=(/,/^)/s/^ *\\[$1\\]=\"\\(.*\\)\"\$/\\1/p" \
+        "$PROJECT_ROOT/scripts/lib/security.sh"
+}
+
+@test "mac-flywheel: cli.modern's cargo crates and tealdeer are pinned to one exact release each" {
+    run _mf_cargo_crate_pin du-dust;  assert_output "1.2.7"
+    run _mf_cargo_crate_pin lsd;      assert_output "1.2.0"
+    run _mf_cargo_crate_pin bat;      assert_output "0.26.1"
+    run _mf_cargo_crate_pin fd-find;  assert_output "10.5.2"
+    run _mf_cargo_crate_pin ripgrep;  assert_output "15.2.0"
+    run _mf_cargo_crate_pin tealdeer; assert_output "1.9.1"
+}
+
+@test "mac-flywheel: _acfs_pinned_cargo_crate_version refuses unpinned crates, prereleases and partial versions" {
+    log_error() { echo "log_error $*" >&2; }
+    eval "$(sed -n '/^_acfs_pinned_cargo_crate_version() {$/,/^}/p' "$PROJECT_ROOT/install.sh")"
+    declare -F _acfs_pinned_cargo_crate_version >/dev/null || fail "_acfs_pinned_cargo_crate_version not found in install.sh"
+    local bad
+    for bad in "latest" "1.3.0-beta.1" "1.2" "v1.2.0" "*" ""; do
+        declare -gA ACFS_CARGO_CRATE_PINNED_VERSIONS=([lsd]="$bad")
+        run _acfs_pinned_cargo_crate_version lsd
+        assert_failure
+        assert_output --partial "Refusing lsd version"
+    done
+    declare -gA ACFS_CARGO_CRATE_PINNED_VERSIONS=([lsd]="1.2.0")
+    run _acfs_pinned_cargo_crate_version bat
+    assert_failure
+    assert_output --partial "Refusing bat version '<unset>'"
+    run _acfs_pinned_cargo_crate_version lsd
+    assert_success
+    assert_output "1.2.0"
+}
+
+@test "mac-flywheel: cli.modern installs each cargo crate at its pin with --locked, never the newest" {
+    local body
+    body="$(sed -n '/^    _cargo_install() {$/,/^    # Atuin (install as target user)$/p' "$PROJECT_ROOT/install.sh")"
+    [[ -n "$body" ]] || fail "cli.modern cargo block not found in install.sh"
+    grep -qF '"$cargo_bin" install "$tool" --version "$version" --locked' <<<"$body" || fail "_cargo_install is not pinned"
+    grep -qF '"$cargo_bin" install "${cargo_specs[@]}" --locked' <<<"$body" || fail "the batch install is not pinned"
+    grep -qF 'cargo_specs+=("$tool@$version")' <<<"$body" || fail "the batch does not name crate@version"
+    ! grep -qF 'no --locked' <<<"$body" || fail "an unlocked retry is still there"
+    ! grep -qE 'install "\$\{cargo_tools_needed\[@\]\}"' <<<"$body" || fail "an unversioned batch is still there"
+}
+
 @test "mac-flywheel: nvm's installer is pinned at v0.41.0, not the vulnerable v0.40.1" {
     local url sha
     url="$(awk '$0=="  nvm:"{getline; print}' "$PROJECT_ROOT/checksums.yaml")"

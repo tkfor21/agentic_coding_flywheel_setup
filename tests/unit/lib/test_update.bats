@@ -1451,6 +1451,53 @@ EOF
     ! grep -E "install ast-grep --locked" "$log_file" || fail "ast-grep installed without a version"
 }
 
+# mac-flywheel local (#68): lsd, du-dust and tealdeer each have one pinned release (security.sh
+# ACFS_CARGO_CRATE_PINNED_VERSIONS).
+@test "update_pinned_cargo_crate_version: refuses unpinned crates, prereleases and partial versions" {
+    local bad
+    for bad in "latest" "1.3.0-beta.1" "1.2" "v1.2.0" ""; do
+        declare -gA ACFS_CARGO_CRATE_PINNED_VERSIONS=([lsd]="$bad")
+        run update_pinned_cargo_crate_version lsd
+        assert_failure
+        assert_output --partial "Refusing lsd version"
+    done
+    declare -gA ACFS_CARGO_CRATE_PINNED_VERSIONS=([lsd]="1.2.0")
+    run update_pinned_cargo_crate_version tealdeer
+    assert_failure
+    assert_output --partial "Refusing tealdeer version '<unset>'"
+    run update_pinned_cargo_crate_version lsd
+    assert_success
+    assert_output "1.2.0"
+}
+
+# cargo replaces a different installed version and skips the same one, so a pinned reinstall needs no force flag.
+@test "update_cargo_tools: reinstalls lsd, dust and tldr at their pins in legacy installs, never the newest" {
+    mkdir -p "$HOME/.cargo/bin"
+    local log_file="$HOME/cargo.log" bin
+    cat > "$HOME/.cargo/bin/cargo" <<EOF
+#!/bin/bash
+echo "\$@" >> "$log_file"
+EOF
+    chmod +x "$HOME/.cargo/bin/cargo"
+    for bin in lsd dust tldr; do
+        printf '#!/bin/bash\necho 0.1.0\n' > "$HOME/.cargo/bin/$bin"
+        chmod +x "$HOME/.cargo/bin/$bin"
+    done
+    export PATH="$HOME/.cargo/bin:$PATH"
+    declare -gA ACFS_CARGO_CRATE_PINNED_VERSIONS=([lsd]="1.2.0" [du-dust]="1.2.7" [tealdeer]="1.9.1")
+    update_load_module_selection() { ACFS_STATE_SELECTION_MODE=legacy; return 0; }
+    update_module_is_selected() { [[ "$1" != tools.ast_grep ]]; }
+
+    UPDATE_RUNTIME=true
+    run update_cargo_tools
+    assert_success
+
+    grep -qx "install lsd --version 1.2.0 --locked" "$log_file" || fail "lsd not pinned: $(cat "$log_file")"
+    grep -qx "install du-dust --version 1.2.7 --locked" "$log_file" || fail "du-dust not pinned: $(cat "$log_file")"
+    grep -qx "install tealdeer --version 1.9.1 --locked" "$log_file" || fail "tealdeer not pinned: $(cat "$log_file")"
+    ! grep -E -- "--force" "$log_file" || fail "a cargo tool was force-installed: $(cat "$log_file")"
+}
+
 
 @test "update.sh: runtime resolver gates avoid inherited PATH leaks" {
     local update="$PROJECT_ROOT/scripts/lib/update.sh"

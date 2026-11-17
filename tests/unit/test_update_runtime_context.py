@@ -2342,8 +2342,9 @@ printf 'HELD=%s:%s\n' "$HELD_COUNT" "${UPDATE_HELD_TOOLS[*]}"
         for tool in ("sg", "lsd", "dust", "tldr"):
             self.write_native_tool(tool)
         output = self.run_update(command="update_cargo_tools")
+        # mac-flywheel local (#68): each crate at its security.sh pin, never force-installed at the newest.
         self.assertEqual([event[-1] for event in self.events() if event[0] == "cargo"],
-                         ["install lsd --locked --force", "install tealdeer --locked --force"])
+                         ["install lsd --version 1.2.0 --locked", "install tealdeer --version 1.9.1 --locked"])
         self.assertFalse(any(event[0] in ("sg", "dust") for event in self.events()))
         self.assertIn("COUNTS=2,2,0", output)
 

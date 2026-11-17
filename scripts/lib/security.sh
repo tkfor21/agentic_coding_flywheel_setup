@@ -990,6 +990,22 @@ ACFS_RUST_PINNED_TOOLCHAIN="1.100.0"
 # repeats this version for the generated installers; keep them equal.
 ACFS_AST_GREP_PINNED_VERSION="0.51.2"
 
+# mac-flywheel local (#68): the ONE release of each other crate ACFS builds with cargo into ~/.cargo/bin. install.sh's
+# cli.modern builds du-dust, lsd, bat, fd-find and ripgrep; `acfs update` reinstalls lsd, du-dust and tealdeer on
+# legacy installs. Without a version, `cargo install` builds the newest crate. Sources (2026-11-16): the first five are
+# what acfs-local's ~/.cargo/.crates.toml records and the last e2e built (ripgrep 15.2.0 per its doctor); tealdeer, which
+# nothing has installed, is crates.io's newest stable release (1.9.1, 2026-10-24). Each was also crates.io's newest
+# stable release and not yanked. install.sh (_acfs_pinned_cargo_crate_version) and update.sh
+# (update_pinned_cargo_crate_version) refuse a crate missing here or anything but a plain X.Y.Z.
+declare -gA ACFS_CARGO_CRATE_PINNED_VERSIONS=(
+    [du-dust]="1.2.7"
+    [lsd]="1.2.0"
+    [bat]="0.26.1"
+    [fd-find]="10.5.2"
+    [ripgrep]="15.2.0"
+    [tealdeer]="1.9.1"
+)
+
 # mac-flywheel local: the ONE FrankenSearch (fsfs) release ACFS installs (step 5, 2026-11-16: acfs-local runs
 # "fsfs 1.12.3 (frankensearch 1.12.3)"; doctor doesn't report fsfs's version; also frankensearch's newest release,
 # 2026-10-05). ACFS resolves fsfs's version itself and passes --version/--artifact-url/--checksum to the installer:

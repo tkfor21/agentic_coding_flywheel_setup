@@ -10,14 +10,14 @@
 ACFS_INTERNAL_CHECKSUMS_SCHEMA=1
 
 declare -gA ACFS_INTERNAL_CHECKSUMS=(
-  [install.sh]="7391e3109b4f269b42d1c8a15d849d65af8560b08c6c8145bc4eef7fd710e734"
+  [install.sh]="854c3ef33a109aaad8dcdebec85d31ad3aaeae7d597189ac63a0eebf8136427e"
   [checksums.yaml]="4b3160a0e2410b5c6ef9fa9628ebe67a8a2189d18428eadeb8e39d77a9ee297d"
   [scripts/preflight.sh]="76e6768d16238317e67f7c0ba38abf5e7440b9d4f76bfd28b5c07b7f007d247e"
-  [scripts/lib/security.sh]="a278b6d4625e1a2634adb336ffe1e6b86ae429f20c4d97b860e5490dd5985ac8"
+  [scripts/lib/security.sh]="469bfdbcd4c08f152dac66117e1f70bfa25ef26258f32a917c31e0e417fc9295"
   [scripts/lib/holds.sh]="8f303cd51b5bfd75059ab1d01448e1c01bd31d3005dd6bb4352fc96dc3c29377"
   [scripts/lib/github_api.sh]="28e27710463a4c2183803aa2a3504763ad555a898ebca4691414c18fc3fe6ce3"
   [scripts/lib/contract.sh]="22c148f44ddbaccd559196196ef903f26f65fc77e3b1b6b4efc62b77d3b97aa3"
-  [scripts/lib/update.sh]="c3804375542a74f90ffca14cc7ec83230f2f179000cbc0e9d5a83c8c4db91f04"
+  [scripts/lib/update.sh]="b0a827382047fa07da7c35c694eafbe5fbdcc0cfa3ae0ef66f98e2fbcae67e70"
   [scripts/lib/doctor.sh]="402d9fe1941a06a59565fd544fddd1ba0fa5ac73f48c4b22db979822e0170b61"
   [scripts/lib/acfs-services.sh]="eb5017eb31ac6df398b0fdc312cfd613e5c84cbd5c2f6925ea79de152f364120"
   [scripts/lib/doctor_fix.sh]="f016c04bc6e5acf3b36835a084e7ca02ddcc90259d2006e8c42ad772bee602af"
