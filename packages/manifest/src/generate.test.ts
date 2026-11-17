@@ -3011,6 +3011,10 @@ describe("uv archive verification prerequisite", () => {
     const program = [
       "set -euo pipefail",
       ...sourceLines,
+      // mac-flywheel local (mac-flywheel#82): the runner below builds the installer's environment with the fork's
+      // _acfs_installer_runner_env (call-site assignment plus security.sh ACFS_INSTALLER_PIN_ENV pins), so the
+      // program needs that real function too. Without it every case fails with "command not found".
+      shellFunction(legacySource, "_acfs_installer_runner_env"),
       shellFunction(legacySource, "acfs_run_verified_upstream_script_as_target_with_env"),
       shellFunction(generatedSource, "acfs_generated_install_lang_" + (tool === "uv" ? "uv" : "rust")),
       'TARGET_USER="$(/usr/bin/id -un)"',
