@@ -384,12 +384,22 @@ srps_service_stable() {
 # unit so updated rules and a rebuilt binary load. The restart count observed
 # here lets the final summary catch a crash-restart that happens after this
 # window and is followed by a stable new process.
+# mac-flywheel local (mac-flywheel#104): start it exactly once. Upstream ran `enable --now` and then an immediate
+# `restart`, which could kill the first instance before it released its named mutex (/dev/shm/AnanicyCppMutex); every
+# later start then exited "Ananicy Cpp is already running!" until systemd's start limit. Now: enable, stop, clear a
+# stale mutex if no ananicy-cpp process exists (this also heals a unit already stuck that way), then start.
 srps_start_ananicy_service() {
+    local mutex="${SRPS_ANANICY_MUTEX:-/dev/shm/AnanicyCppMutex}"
     sudo systemctl reset-failed ananicy-cpp >/dev/null 2>&1 || true
-    if ! sudo systemctl enable --now ananicy-cpp >/dev/null 2>&1; then
-        die "Failed to enable/start ananicy-cpp; check with: sudo systemctl status ananicy-cpp"
+    if ! sudo systemctl enable ananicy-cpp >/dev/null 2>&1; then
+        die "Failed to enable ananicy-cpp; check with: sudo systemctl status ananicy-cpp"
     fi
-    if ! sudo systemctl restart ananicy-cpp >/dev/null 2>&1 || ! srps_service_stable; then
+    sudo systemctl stop ananicy-cpp >/dev/null 2>&1 || true
+    if [ -e "$mutex" ] && ! pgrep -x ananicy-cpp >/dev/null 2>&1; then
+        print_info "Removing stale ananicy-cpp lock $mutex (no ananicy-cpp process is running)"
+        sudo rm -f -- "$mutex"
+    fi
+    if ! sudo systemctl start ananicy-cpp >/dev/null 2>&1 || ! srps_service_stable; then
         die "ananicy-cpp did not remain running; inspect sudo systemctl status ananicy-cpp and sudo journalctl -u ananicy-cpp"
     fi
     SRPS_STARTUP_NRESTARTS="$SRPS_SERVICE_NRESTARTS"
