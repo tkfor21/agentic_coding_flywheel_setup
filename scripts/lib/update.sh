@@ -11616,6 +11616,17 @@ update_zoxide() {
         log_item "skip" "Zoxide" "not installed"
         return 0
     fi
+    # mac-flywheel local (mac-flywheel#102): a zoxide in the system directories belongs to the package manager. On
+    # Ubuntu, install.sh puts it in from apt (0.9.3 from the pinned image's archive), and apt upgrades maintain it.
+    # zoxide's installer has no version option and always fetches the newest release into ~/.local/bin, which would
+    # shadow the package (0.9.3 to 0.10.0 on every update). A zoxide the installer itself put elsewhere is still
+    # reinstalled below.
+    case "$zoxide_bin" in
+        /usr/bin/*|/bin/*)
+            log_item "skip" "Zoxide" "system package ($zoxide_bin); the package manager maintains it"
+            return 0
+            ;;
+    esac
 
     capture_version_before "zoxide"
 

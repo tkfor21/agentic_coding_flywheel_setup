@@ -2719,6 +2719,36 @@ EOF
     [[ -f "$marker_file" ]]
 }
 
+# mac-flywheel local (mac-flywheel#102): on Ubuntu, ACFS installs zoxide from apt (the pinned image's archive, 0.9.3).
+# zoxide's installer has no version option and always installs the newest release, so `acfs update` must not lay it
+# over the package. A zoxide outside the system directories (installed by that installer) keeps upstream's reinstall.
+_mf_zoxide_update_fixture() {
+    ZOXIDE_LOG="$HOME/zoxide.log"
+    : > "$ZOXIDE_LOG"
+    update_skip_held_tool() { return 1; }
+    capture_version_before() { :; }
+    capture_version_after() { return 1; }
+    update_require_security() { return 0; }
+    update_run_verified_installer_with_shell_repair() { echo "reinstall $2" >> "$ZOXIDE_LOG"; }
+}
+
+@test "update_zoxide: leaves an apt-installed zoxide to apt, never reinstalls the newest release over it" {
+    _mf_zoxide_update_fixture
+    update_tool_binary_path() { printf '/usr/bin/zoxide\n'; }
+    run update_zoxide
+    assert_success
+    assert_output --partial "system package"
+    [[ ! -s "$ZOXIDE_LOG" ]] || fail "reinstalled over the apt package: $(cat "$ZOXIDE_LOG")"
+}
+
+@test "update_zoxide: still reinstalls a zoxide the installer put in ~/.local/bin" {
+    _mf_zoxide_update_fixture
+    update_tool_binary_path() { printf '%s/.local/bin/zoxide\n' "$HOME"; }
+    run update_zoxide
+    assert_success
+    grep -qx "reinstall zoxide" "$ZOXIDE_LOG" || fail "the user-installed zoxide wasn't reinstalled: $(cat "$ZOXIDE_LOG")"
+}
+
 # mac-flywheel local (mac-flywheel#103): the freeze pins nvm's installer by commit (nvm-sh/nvm 4e8758a8 = tag v0.41.0),
 # so its URL carries no version. update_nvm_and_node takes nvm's version from security.sh ACFS_NVM_PINNED_VERSION.
 @test "update_pinned_nvm_version: refuses prereleases, partial versions and names" {
