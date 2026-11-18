@@ -171,8 +171,8 @@ installers:
     sha256: "d7712a54f34d8be4164f0da1f439ddc6c097800e0598faf516ecabca68388dca"
 
   srps:
-    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/084581f2af0c5c6199a0f5311d7b144b7873d4c8/vendor/installers/srps.sh"
-    sha256: "ce45b312249c9b2780cf464c71114f146cc59d2b6f70e148ad019494711f7077"
+    url: "https://raw.githubusercontent.com/tkfor21/agentic_coding_flywheel_setup/eae43eae3d8c4f3e089242418cdfb08f8f499c2a/vendor/installers/srps.sh"
+    sha256: "9b6fb5e736b02f82cbcff7869bccdea485244f23545f32aba95078679f43607c"
 
   tru:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/toon_rust/5be0992fb978faef6f8f1aabc9ea38dbee4ec56f/install.sh"

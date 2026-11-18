@@ -1077,6 +1077,52 @@ _mf_vendored_entry_ok() { # tool -> fails unless checksums.yaml points at vendor
     [[ "$(acfs_installer_pin_env srps)" == "SRPS_SYSMONI_REF=v1.4.3" ]] || fail "srps env pin: '$(acfs_installer_pin_env srps)'"
 }
 
+# mac-flywheel local (mac-flywheel#104): srps started ananicy-cpp with `enable --now` and then an immediate `restart`,
+# killing the first instance before it released its named mutex (/dev/shm/AnanicyCppMutex). Every later start then
+# exited "Ananicy Cpp is already running!" until systemd's start limit (acfs-local, 2026-11-17).
+_mf_srps_start_fixture() { # $1 = pgrep result (0: a process exists, 1: none)
+    SRPS_LOG="$BATS_TEST_TMPDIR/srps.log"
+    : > "$SRPS_LOG"
+    export SRPS_ANANICY_MUTEX="$BATS_TEST_TMPDIR/AnanicyCppMutex"
+    : > "$SRPS_ANANICY_MUTEX"
+    eval "$(sed -n '/^srps_start_ananicy_service() {$/,/^}/p' "$PROJECT_ROOT/vendor/installers/srps.sh")"
+    declare -F srps_start_ananicy_service >/dev/null || fail "srps_start_ananicy_service not found"
+    PGREP_RC="$1"
+    sudo() { echo "sudo $*" >> "$SRPS_LOG"; [[ "$1" == rm ]] && command rm -f -- "${@: -1}"; return 0; }
+    systemctl() { echo "systemctl $*" >> "$SRPS_LOG"; return 1; }
+    pgrep() { return "$PGREP_RC"; }
+    srps_service_stable() { SRPS_SERVICE_NRESTARTS="NRestarts=0"; return 0; }
+    die() { echo "die $*" >> "$SRPS_LOG"; return 1; }
+    print_info() { :; }
+    print_warning() { :; }
+}
+
+@test "mac-flywheel: srps starts ananicy-cpp once (stop, then start), never start-then-restart" {
+    _mf_srps_start_fixture 1
+    run srps_start_ananicy_service
+    assert_success
+    ! grep -q 'enable --now' "$SRPS_LOG" || fail "enable --now still starts it before the restart: $(cat "$SRPS_LOG")"
+    ! grep -q 'systemctl restart' "$SRPS_LOG" || fail "an immediate restart remains: $(cat "$SRPS_LOG")"
+    grep -qx 'sudo systemctl enable ananicy-cpp' "$SRPS_LOG" || fail "not enabled: $(cat "$SRPS_LOG")"
+    [[ "$(grep -n 'systemctl stop ananicy-cpp' "$SRPS_LOG" | cut -d: -f1)" -lt "$(grep -n 'systemctl start ananicy-cpp' "$SRPS_LOG" | cut -d: -f1)" ]] \
+        || fail "expected stop before start: $(cat "$SRPS_LOG")"
+    [[ "$(grep -c 'systemctl start ananicy-cpp' "$SRPS_LOG")" -eq 1 ]] || fail "started more than once: $(cat "$SRPS_LOG")"
+}
+
+@test "mac-flywheel: srps removes a stale ananicy-cpp mutex only when no ananicy-cpp process is running" {
+    _mf_srps_start_fixture 1
+    run srps_start_ananicy_service
+    assert_success
+    [[ ! -e "$SRPS_ANANICY_MUTEX" ]] || fail "the stale mutex was left behind"
+    [[ "$(grep -n "rm -f -- $SRPS_ANANICY_MUTEX" "$SRPS_LOG" | cut -d: -f1)" -lt "$(grep -n 'systemctl start ananicy-cpp' "$SRPS_LOG" | cut -d: -f1)" ]] \
+        || fail "expected the mutex removed before the start: $(cat "$SRPS_LOG")"
+
+    _mf_srps_start_fixture 0
+    run srps_start_ananicy_service
+    assert_success
+    [[ -e "$SRPS_ANANICY_MUTEX" ]] || fail "removed the mutex while an ananicy-cpp process exists"
+}
+
 @test "mac-flywheel: upstream's acfs update Node maintenance installs only the pinned Node" {
     # Upstream af8d3095 added update_nvm_and_node: it resolved nvm's `node` (latest) or the old default alias with
     # `nvm version-remote` and set the default to `node`. It must install and default to the pinned version.
