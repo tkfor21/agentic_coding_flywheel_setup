@@ -1193,6 +1193,21 @@ update_pinned_ast_grep_version() {
     printf '%s\n' "$version"
 }
 
+# mac-flywheel local (mac-flywheel#103): the pinned nvm release (security.sh ACFS_NVM_PINNED_VERSION, loaded on demand).
+# Refuses anything but a plain X.Y.Z.
+update_pinned_nvm_version() {
+    local version="${ACFS_NVM_PINNED_VERSION-}"
+    if [[ -z "${ACFS_NVM_PINNED_VERSION+set}" ]] && declare -F update_require_security >/dev/null 2>&1; then
+        update_require_security >/dev/null 2>&1 || true
+        version="${ACFS_NVM_PINNED_VERSION:-}"
+    fi
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Refusing nvm version '${version:-<unset>}': ACFS installs only a pinned, stable X.Y.Z release" >&2
+        return 1
+    fi
+    printf '%s\n' "$version"
+}
+
 # mac-flywheel local (#68), the `acfs update` twin of install.sh's _acfs_pinned_cargo_crate_version (security.sh
 # ACFS_CARGO_CRATE_PINNED_VERSIONS, loaded on demand). Refuses an unpinned crate and anything but a plain X.Y.Z.
 update_pinned_cargo_crate_version() {
@@ -8652,10 +8667,10 @@ update_nvm_and_node() {
         printf 'Cannot load the approved nvm installer and checksum.\n' >&2
         return 1
     fi
-    if [[ "${KNOWN_INSTALLERS[nvm]:-}" =~ /nvm/v([0-9]+\.[0-9]+\.[0-9]+)/install\.sh$ ]]; then
-        approved_version="${BASH_REMATCH[1]}"
-    else
-        printf 'Cannot determine the approved nvm version from its installer URL.\n' >&2
+    # mac-flywheel local (mac-flywheel#103): the approved nvm is security.sh ACFS_NVM_PINNED_VERSION. Upstream parsed
+    # it from a /nvm/vX.Y.Z/install.sh URL, but the freeze pins the installer by commit, so that always failed.
+    if ! approved_version="$(update_pinned_nvm_version)"; then
+        printf 'Cannot determine the approved nvm version (security.sh ACFS_NVM_PINNED_VERSION).\n' >&2
         return 1
     fi
 

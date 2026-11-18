@@ -1144,6 +1144,9 @@ source "${UPDATE_TEST_LIBRARY%/*}/security.sh"
 source "${UPDATE_TEST_LIBRARY%/*}/holds.sh"
 ACFS_HOLDS_FILE="$TEST_HOME/.acfs/holds.yaml"
 KNOWN_INSTALLERS=([nvm]="https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh")
+# mac-flywheel local (mac-flywheel#103): the approved nvm comes from security.sh ACFS_NVM_PINNED_VERSION, not the URL.
+# The fixture installer provides 0.40.1, so that's the approved release here.
+ACFS_NVM_PINNED_VERSION=0.40.1
 update_require_security() { return 0; }
 get_checksum() { [[ "$1" == nvm ]] && sha256sum "$TEST_ROOT/nvm-installer" | awk '{print $1}'; }
 verify_checksum() {

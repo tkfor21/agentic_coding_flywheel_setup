@@ -2719,6 +2719,60 @@ EOF
     [[ -f "$marker_file" ]]
 }
 
+# mac-flywheel local (mac-flywheel#103): the freeze pins nvm's installer by commit (nvm-sh/nvm 4e8758a8 = tag v0.41.0),
+# so its URL carries no version. update_nvm_and_node takes nvm's version from security.sh ACFS_NVM_PINNED_VERSION.
+@test "update_pinned_nvm_version: refuses prereleases, partial versions and names" {
+    local bad
+    for bad in "latest" "0.42.0-rc.1" "0.41" "v0.41.0" ""; do
+        export ACFS_NVM_PINNED_VERSION="$bad"
+        run update_pinned_nvm_version
+        assert_failure
+        assert_output --partial "Refusing nvm version"
+    done
+    export ACFS_NVM_PINNED_VERSION="0.41.0"
+    run update_pinned_nvm_version
+    assert_success
+    assert_output "0.41.0"
+}
+
+@test "mac-flywheel: nvm is pinned to 0.41.0 in security.sh" {
+    run sed -n 's/^ACFS_NVM_PINNED_VERSION="\(.*\)"$/\1/p' "$PROJECT_ROOT/scripts/lib/security.sh"
+    assert_output "0.41.0"
+}
+
+@test "update_nvm_and_node: approves the pinned nvm with a commit-pinned installer URL" {
+    local log_file="$HOME/nvm-calls.log"
+    : > "$log_file"
+    local nvm_dir="$HOME/.nvm"
+    mkdir -p "$nvm_dir"
+    : > "$nvm_dir/nvm.sh"
+    printf 'x' > "$nvm_dir/nvm.sh"
+    declare -gA KNOWN_INSTALLERS=([nvm]="https://raw.githubusercontent.com/nvm-sh/nvm/4e8758a801eea9479b32a904f31093e410ddaba4/install.sh")
+    export ACFS_NVM_PINNED_VERSION="0.41.0"
+    update_pinned_node_version() { printf '26.13.1\n'; }
+    update_target_user() { printf 'u\n'; }
+    update_current_user() { printf 'u\n'; }
+    update_verified_installer_runner() { local -n _r="$1"; _r=(/bin/bash); }
+    update_require_security() { return 0; }
+    update_run_bounded_in_target_context() { echo "bounded $*" >> "$log_file"; }
+    update_run_verified_installer_with_env() { echo "installer $1" >> "$log_file"; }
+    update_run_in_target_context() {
+        local script="" a
+        for a in "$@"; do case "$a" in *'nvm --version'*) script=probe ;; esac; done
+        if [[ "$script" == probe && ! -s "$HOME/probed" ]]; then
+            : > "$HOME/probed"; printf 'x' > "$HOME/probed"; printf '0.40.1\n'; return 0
+        fi
+        echo "target-args ${*: -2}" >> "$log_file"
+        return 0
+    }
+    FORCE_MODE=false
+
+    run update_nvm_and_node "$nvm_dir"
+    refute_output --partial "Cannot determine the approved nvm version"
+    grep -qx "installer nvm" "$log_file" || fail "the older nvm 0.40.1 was not upgraded to the pin: $(cat "$log_file")"
+    grep -q "^target-args 0.41.0 26.13.1$" "$log_file" || fail "the pinned versions didn't reach the target script: $(cat "$log_file")"
+}
+
 # mac-flywheel local (mac-flywheel#45): checksums.yaml is frozen at the pin. acfs update (and the nightly job) must
 # verify installers against the deployed copy and never replace it with a download, which defaulted to the
 # original repo's live main and silently undid the freeze.

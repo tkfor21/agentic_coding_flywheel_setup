@@ -977,6 +977,12 @@ declare -gA ACFS_INSTALLER_PIN_ENV=(
 # acfs.manifest.yaml (lang.nvm, agents.gemini) repeats this version for the generated installers; keep them equal.
 ACFS_NODE_PINNED_VERSION="26.13.1"
 
+# mac-flywheel local (mac-flywheel#103): the nvm release ACFS installs and `acfs update` maintains. checksums.yaml
+# freezes nvm's installer by commit (nvm-sh/nvm 4e8758a8, which the annotated tag v0.41.0 points to; that installer's
+# nvm_latest_version prints v0.41.0), so the URL carries no version to parse. update.sh (update_pinned_nvm_version)
+# refuses anything but a plain X.Y.Z. Keep it equal to the commit in checksums.yaml's nvm entry.
+ACFS_NVM_PINNED_VERSION="0.41.0"
+
 # mac-flywheel local: the ONE Rust toolchain ACFS installs, an exact stable release (rust-lang/rust releases/latest
 # 1.100.0, published 2026-11-12; Joel, 2026-11-16: stable, not nightly). Never a channel name (nightly, stable, beta),
 # which moves, and never a prerelease. install.sh (_acfs_pinned_rust_toolchain) and update.sh
