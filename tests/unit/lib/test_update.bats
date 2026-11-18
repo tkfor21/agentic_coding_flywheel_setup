@@ -2719,6 +2719,49 @@ EOF
     [[ -f "$marker_file" ]]
 }
 
+# mac-flywheel local (mac-flywheel#45): checksums.yaml is frozen at the pin. acfs update (and the nightly job) must
+# verify installers against the deployed copy and never replace it with a download, which defaulted to the
+# original repo's live main and silently undid the freeze.
+@test "update_require_security: never refreshes checksums.yaml from GitHub" {
+    local repo_root
+    local marker_file
+    local refresh_log
+
+    repo_root="$(create_temp_dir)"
+    marker_file="$repo_root/security-sourced.marker"
+    refresh_log="$repo_root/refresh.log"
+
+    mkdir -p "$repo_root/scripts/lib"
+    cat > "$repo_root/scripts/lib/security.sh" <<EOF
+#!/usr/bin/env bash
+load_checksums() {
+    : > "$marker_file"
+    return 0
+}
+EOF
+    chmod +x "$repo_root/scripts/lib/security.sh"
+
+    export ACFS_BIN_DIR="$repo_root/missing-bin"
+    export ACFS_HOME="$repo_root/missing-home"
+    export ACFS_REPO_ROOT="$repo_root"
+    export CHECKSUMS_LOCAL="$repo_root/checksums.yaml"
+    UPDATE_SECURITY_READY=false
+
+    refresh_checksums() {
+        echo "refresh_checksums $*" >> "$refresh_log"
+        return 0
+    }
+    update_curl() {
+        echo "update_curl $*" >> "$refresh_log"
+        return 1
+    }
+
+    run update_require_security
+    assert_success
+    [[ -f "$marker_file" ]] || fail "security.sh was not loaded"
+    [[ ! -s "$refresh_log" ]] || fail "update fetched checksums: $(cat "$refresh_log")"
+}
+
 @test "update_require_security: reconciles stale installer URLs from checksums.yaml" {
     local runtime_home
     local rust_url

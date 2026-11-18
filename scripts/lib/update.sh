@@ -5261,9 +5261,11 @@ update_require_security() {
         return 0
     fi
 
-    # Refresh checksums from GitHub before loading
-    # This ensures we have the latest checksums when security verification is needed
-    refresh_checksums "${QUIET:-false}" || true
+    # mac-flywheel local (mac-flywheel#45): no refresh_checksums here. checksums.yaml is frozen at the pin, and acfs
+    # update verifies installers against the deployed copy. The refresh downloaded checksums.yaml from
+    # ${ACFS_REPO_OWNER}/${ACFS_REPO_NAME} at ${ACFS_CHECKSUMS_REF}, which on a Local VM defaulted to the original
+    # repo's live main, and overwrote the frozen file every update (the nightly job included). refresh_checksums is
+    # kept, uncalled, so upstream's own tests of it still hold.
 
     # Check for security.sh in expected locations
     local security_script=""
